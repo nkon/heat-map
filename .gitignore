@@ -60,6 +60,9 @@ config.json
 # Logs
 *.log
 
+# Download state files
+download_state.json
+
 # Temporary files
 *.tmp
 *.temp

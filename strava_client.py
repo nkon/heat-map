@@ -35,7 +35,17 @@ class StravaRateLimiter:
                 wait_seconds = (self.short_term_reset - now).total_seconds()
                 if wait_seconds > 0:
                     print(f"Rate limit reached. Waiting {wait_seconds:.0f} seconds...")
-                    time.sleep(wait_seconds + 1)
+                    # Sleep in 1-second chunks to allow for keyboard interrupts
+                    total_sleep = int(wait_seconds + 1)
+                    for i in range(total_sleep):
+                        try:
+                            time.sleep(1)
+                            if i % 10 == 0 and i > 0:  # Show countdown every 10 seconds
+                                remaining = total_sleep - i
+                                print(f"  {remaining} seconds remaining...")
+                        except KeyboardInterrupt:
+                            print("\nRate limit wait interrupted by user")
+                            raise
                 else:
                     # Reset time has passed, update counters
                     self.short_term_requests = 0
@@ -44,7 +54,19 @@ class StravaRateLimiter:
                 wait_seconds = (self.daily_reset - now).total_seconds()
                 if wait_seconds > 0:
                     print(f"Daily limit reached. Waiting {wait_seconds:.0f} seconds...")
-                    time.sleep(wait_seconds + 1)
+                    # Sleep in 1-second chunks to allow for keyboard interrupts
+                    total_sleep = int(wait_seconds + 1)
+                    for i in range(total_sleep):
+                        try:
+                            time.sleep(1)
+                            if i % 60 == 0 and i > 0:  # Show countdown every minute
+                                remaining = total_sleep - i
+                                hours = remaining // 3600
+                                minutes = (remaining % 3600) // 60
+                                print(f"  {hours}h {minutes}m remaining...")
+                        except KeyboardInterrupt:
+                            print("\nDaily limit wait interrupted by user")
+                            raise
                 else:
                     # Reset time has passed, update counters
                     self.daily_requests = 0
@@ -168,7 +190,16 @@ class StravaClient:
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 429:  # Rate limit exceeded
                 print("Rate limit exceeded by server. Waiting 60 seconds...")
-                time.sleep(60)
+                # Sleep in 1-second chunks to allow for keyboard interrupts
+                for i in range(60):
+                    try:
+                        time.sleep(1)
+                        if i % 10 == 0 and i > 0:  # Show countdown every 10 seconds
+                            remaining = 60 - i
+                            print(f"  {remaining} seconds remaining...")
+                    except KeyboardInterrupt:
+                        print("\nServer rate limit wait interrupted by user")
+                        raise
                 return self._make_request(endpoint, params)
             raise
     
