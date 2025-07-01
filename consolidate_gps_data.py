@@ -1,103 +1,140 @@
 #!/usr/bin/env python3
 
 """
-Consolidate individual activity JSON files into a single GPS data file
-compatible with generate_heatmap_svg.py
+GPS Data Consolidation Tool
+
+Consolidates individual activity JSON files into unified GPS data files
+compatible with heatmap generation. Refactored to use centralized utilities.
 """
 
-import os
-import json
-import glob
-from datetime import datetime
-from typing import List, Dict, Any
-
-
-def load_individual_activity_files(data_dir: str) -> Dict[int, List[List[float]]]:
-    """Load all individual activity JSON files and extract GPS coordinates"""
-    
-    gps_data_dict = {}
-    activity_files = glob.glob(os.path.join(data_dir, "activity_*.json"))
-    
-    if not activity_files:
-        print(f"No activity files found in {data_dir}")
-        return gps_data_dict
-    
-    print(f"Found {len(activity_files)} activity files")
-    
-    for activity_file in sorted(activity_files):
-        try:
-            with open(activity_file, 'r') as f:
-                activity_data = json.load(f)
-            
-            # Extract GPS coordinates from the activity
-            if 'gps_points' in activity_data and activity_data['gps_points']:
-                activity_id = activity_data.get('activity_id', 0)
-                coords = activity_data['gps_points']
-                gps_data_dict[activity_id] = coords
-                print(f"  {os.path.basename(activity_file)}: {len(coords)} GPS points")
-            else:
-                print(f"  {os.path.basename(activity_file)}: No GPS data")
-                
-        except Exception as e:
-            print(f"  Error loading {activity_file}: {e}")
-    
-    return gps_data_dict
+from strava_config import StravaConfig
+from strava_files import StravaFileManager
+from strava_progress import StravaProgressReporter
+from strava_utils import handle_keyboard_interrupt
+from heatmap_utils import (
+    validate_gps_data_structure,
+    format_gps_summary,
+    calculate_gps_bounds
+)
 
 
 def main():
-    print("GPS Data Consolidation Tool")
-    print("=" * 30)
-    
-    # Configuration
-    data_dir = "strava_data"
-    output_file = os.path.join(data_dir, "gps_data.json")
-    
-    if not os.path.exists(data_dir):
-        print(f"Data directory {data_dir} does not exist")
-        return
-    
-    # Load all individual activity files
-    print(f"Loading GPS data from individual activity files in {data_dir}...")
-    gps_data_dict = load_individual_activity_files(data_dir)
-    
-    if not gps_data_dict:
-        print("No GPS data found in activity files")
-        return
-    
-    # Save consolidated GPS data
-    print(f"\nSaving consolidated GPS data to {output_file}...")
-    with open(output_file, 'w') as f:
-        json.dump(gps_data_dict, f)
-    
-    # Create latest version link for compatibility
-    latest_file = os.path.join(data_dir, "gps_data_latest.json")
-    with open(latest_file, 'w') as f:
-        json.dump(gps_data_dict, f)
-    
-    # Calculate total points
-    total_points = sum(len(coords) for coords in gps_data_dict.values())
-    
-    # Summary
-    print(f"\n📊 Consolidation Summary:")
-    print(f"  Total activities: {len(gps_data_dict):,}")
-    print(f"  Total GPS points: {total_points:,}")
-    print(f"  Output file: {output_file}")
-    print(f"  Latest version: {latest_file}")
-    
-    # Show geographical bounds
-    if gps_data_dict:
-        all_points = []
-        for coords in gps_data_dict.values():
-            all_points.extend(coords)
+    """Main GPS data consolidation process"""
+    try:
+        # Initialize utilities
+        config_manager = StravaConfig()
+        progress_reporter = StravaProgressReporter("GPS Data Consolidation Tool")
         
-        lats = [point[0] for point in all_points]
-        lons = [point[1] for point in all_points]
+        # Start operation
+        progress_reporter.start_operation(
+            "Consolidates individual activity JSON files into unified GPS data files\n"
+            "compatible with heatmap generation"
+        )
+        
+        # Load configuration and setup file manager
+        config_manager.load()
+        file_manager = StravaFileManager(config_manager.get_output_dir())
+        
+        # Load individual activity files
+        print("📂 Loading individual activity files...")
+        try:
+            activities = file_manager.load_individual_activities()
+            
+            if not activities:
+                progress_reporter.add_error("No individual activity files found")
+                print("💡 Tip: Run download_individual_activities.py first to create activity files")
+                return
+            
+            progress_reporter.log_file_operation(
+                "loaded", 
+                f"{len(activities)} individual activity files"
+            )
+            
+            # Log each activity for progress tracking
+            for activity in activities:
+                mock_activity_info = {
+                    'id': activity.get('activity_id', 'unknown'),
+                    'type': activity.get('activity_type', 'Unknown'),
+                    'name': activity.get('activity_name', 'Unnamed')
+                }
+                gps_count = len(activity.get('gps_points', []))
+                progress_reporter.log_activity_processed(mock_activity_info, gps_count)
+            
+        except Exception as e:
+            progress_reporter.add_error(f"Failed to load activity files: {e}")
+            return
+        
+        # Consolidate GPS data
+        print("\n🔄 Consolidating GPS data...")
+        try:
+            gps_data_dict = file_manager.consolidate_gps_data_from_activities(activities)
+            
+            if not gps_data_dict:
+                progress_reporter.add_error("No GPS data found in activity files")
+                return
+            
+            progress_reporter.log_file_operation(
+                "consolidated", 
+                f"GPS data from {len(gps_data_dict)} activities"
+            )
+            
+        except Exception as e:
+            progress_reporter.add_error(f"Failed to consolidate GPS data: {e}")
+            return
+        
+        # Validate consolidated data
+        print("✅ Validating consolidated GPS data...")
+        is_valid, issues = validate_gps_data_structure(gps_data_dict)
+        if not is_valid:
+            for issue in issues[:5]:  # Show first 5 issues
+                progress_reporter.add_warning(f"GPS data validation: {issue}")
+            if len(issues) > 5:
+                progress_reporter.add_warning(f"... and {len(issues) - 5} more validation issues")
+        
+        # Show GPS data summary
+        print("\n" + format_gps_summary(gps_data_dict))
+        
+        # Save consolidated GPS data
+        print("\n💾 Saving consolidated GPS data...")
+        try:
+            # Save with timestamp and latest versions
+            timestamped_path, latest_path = file_manager.save_gps_data(gps_data_dict)
+            
+            progress_reporter.log_file_operation("saved", timestamped_path)
+            progress_reporter.log_file_operation("saved", latest_path)
+            
+        except Exception as e:
+            progress_reporter.add_error(f"Failed to save GPS data: {e}")
+            return
+        
+        # Calculate and show geographical coverage
+        bounds = calculate_gps_bounds(gps_data_dict)
+        min_lat, max_lat, min_lon, max_lon = bounds
         
         print(f"\n🌍 Geographical Coverage:")
-        print(f"  Latitude range: {min(lats):.6f} to {max(lats):.6f}")
-        print(f"  Longitude range: {min(lons):.6f} to {max(lons):.6f}")
-    
-    print("\nConsolidation complete! You can now run generate_heatmap_svg.py")
+        print(f"  Latitude range: {min_lat:.6f}° to {max_lat:.6f}°")
+        print(f"  Longitude range: {min_lon:.6f}° to {max_lon:.6f}°")
+        print(f"  Coverage area: {abs(max_lat - min_lat):.3f}° × {abs(max_lon - min_lon):.3f}°")
+        
+        # Show final summary
+        additional_stats = {
+            'Output directory': file_manager.output_dir,
+            'Consolidated activities': len(gps_data_dict),
+            'Geographic span': f"{abs(max_lat - min_lat):.3f}° × {abs(max_lon - min_lon):.3f}°",
+            'Data validation': "✅ Passed" if is_valid else f"⚠️ {len(issues)} issues found"
+        }
+        
+        progress_reporter.show_summary(additional_stats)
+        
+        print(f"\n🎉 GPS data consolidation complete!")
+        print("💡 You can now run generate_heatmap_svg.py to create your heatmap")
+        
+    except KeyboardInterrupt:
+        handle_keyboard_interrupt("GPS Data Consolidation")
+    except Exception as e:
+        print(f"❌ GPS data consolidation failed: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 if __name__ == "__main__":

@@ -1,214 +1,116 @@
 #!/usr/bin/env python3
 
 """
-Download individual activity GPS data from Strava
-Each activity is saved as a separate JSON file with date in filename
+Strava Individual Activity GPS Data Downloader
+
+Download individual activity GPS data from Strava.
+Each activity is saved as a separate JSON file with date in filename.
+Refactored to use centralized utilities for configuration, authentication, 
+file operations, and progress reporting.
 """
 
-import os
-import json
-import time
-import requests
-from typing import Dict, Any
-from datetime import datetime
-from strava_client import StravaClient
-
-
-def load_config() -> Dict[str, Any]:
-    config_file = "config.json"
-    if os.path.exists(config_file):
-        with open(config_file, 'r') as f:
-            return json.load(f)
-    
-    # Create default config file
-    default_config = {
-        "strava": {
-            "client_id": "YOUR_CLIENT_ID",
-            "client_secret": "YOUR_CLIENT_SECRET",
-            "access_token": "YOUR_ACCESS_TOKEN"
-        },
-        "data": {
-            "output_dir": "strava_data",
-            "gps_data_file": "gps_data.json"
-        }
-    }
-    
-    with open(config_file, 'w') as f:
-        json.dump(default_config, f, indent=2)
-    
-    print(f"Created {config_file}. Please update it with your Strava API credentials.")
-    return default_config
-
-
-def check_rate_limit_status(access_token: str) -> bool:
-    """Check if we can make API requests or need to wait for rate limit reset"""
-    
-    headers = {'Authorization': f'Bearer {access_token}'}
-    
-    try:
-        response = requests.get('https://www.strava.com/api/v3/athlete', headers=headers)
-        
-        if response.status_code == 200:
-            return True
-        elif response.status_code == 429:
-            print("Rate limit exceeded. Checking reset time...")
-            
-            # Calculate wait time based on current time
-            now = datetime.now()
-            current_minute = now.minute
-            
-            # Rate limits reset at :00, :15, :30, :45
-            reset_minutes = [0, 15, 30, 45]
-            next_reset = None
-            
-            for reset_min in reset_minutes:
-                if reset_min > current_minute:
-                    next_reset = reset_min
-                    break
-            
-            if next_reset is None:
-                next_reset = 60  # Next hour
-            
-            wait_minutes = (next_reset - current_minute) % 60
-            
-            if wait_minutes == 0:
-                wait_minutes = 1  # At least 1 minute
-                
-            print(f"Waiting {wait_minutes} minutes for rate limit reset (until :{next_reset:02d})...")
-            time.sleep(wait_minutes * 60 + 10)  # Add 10 seconds buffer
-            
-            # Check again
-            return check_rate_limit_status(access_token)
-        else:
-            print(f"Unexpected API response: {response.status_code}")
-            return False
-            
-    except Exception as e:
-        print(f"Error checking rate limit: {e}")
-        return False
-
-def authenticate_strava(config: Dict[str, Any]) -> StravaClient:
-    strava_config = config["strava"]
-    
-    client = StravaClient(
-        client_id=strava_config["client_id"],
-        client_secret=strava_config["client_secret"],
-        access_token=strava_config.get("access_token"),
-        refresh_token=strava_config.get("refresh_token"),
-        config_file="config.json"
-    )
-    
-    # If no access token, help user authenticate
-    if not client.access_token or client.access_token == "YOUR_ACCESS_TOKEN":
-        print("Strava authentication required.")
-        print("Please visit the following URL to authorize the application:")
-        print(client.get_authorization_url("http://localhost:8000/callback"))
-        print()
-        auth_code = input("Enter the authorization code from the callback URL: ").strip()
-        
-        token_data = client.exchange_code_for_token(auth_code)
-        
-        # Update config with new token
-        config["strava"]["access_token"] = token_data["access_token"]
-        config["strava"]["refresh_token"] = token_data["refresh_token"]
-        
-        with open("config.json", 'w') as f:
-            json.dump(config, f, indent=2)
-        
-        print("Authentication successful! Token saved to config.json")
-    
-    return client
+from strava_config import StravaConfig
+from strava_auth import StravaAuthenticator
+from strava_files import StravaFileManager
+from strava_progress import StravaProgressReporter
+from strava_utils import handle_keyboard_interrupt
 
 
 def main():
-    print("Strava Individual Activity GPS Data Downloader")
-    print("=" * 50)
-    
-    # Load configuration
-    config = load_config()
-    
-    # Create output directory
-    data_config = config["data"]
-    output_dir = data_config["output_dir"]
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Check rate limit before starting
-    print("Checking API rate limit status...")
-    if not check_rate_limit_status(config["strava"]["access_token"]):
-        print("Cannot proceed due to rate limit issues. Please try again later.")
-        return
-    
-    # Authenticate with Strava
+    """Main download process for individual activities"""
     try:
-        client = authenticate_strava(config)
+        # Initialize utilities
+        config_manager = StravaConfig()
+        authenticator = StravaAuthenticator()
+        progress_reporter = StravaProgressReporter("Strava Individual Activity GPS Data Downloader")
         
-        # Test authentication
+        # Start operation
+        progress_reporter.start_operation(
+            "Downloads individual activity GPS data from Strava.\n"
+            "Each activity is saved as a separate JSON file with date in filename."
+        )
+        
+        # Load configuration and setup file manager
+        config_manager.load()
+        file_manager = StravaFileManager(config_manager.get_output_dir())
+        
+        # Authenticate and create client
+        print("🔐 Authenticating with Strava...")
+        client = authenticator.ensure_authenticated_client()
+        
+        # Get athlete info
         athlete = client.get_athlete()
-        print(f"Authenticated as: {athlete['firstname']} {athlete['lastname']}")
         
-    except Exception as e:
-        print(f"Authentication failed: {e}")
-        return
-    
-    # Download GPS data to individual files
-    print("\nDownloading GPS data from Strava (individual files per activity)...")
-    try:
-        file_info = client.download_individual_activity_gps_data(output_dir)
-        print(f"Downloaded GPS data from {len(file_info)} activities")
-        
-        if not file_info:
-            print("No GPS data found. Make sure you have activities with GPS tracks.")
+        # Download GPS data to individual files
+        print("\n📥 Downloading individual activity GPS data from Strava...")
+        try:
+            file_info = client.download_individual_activity_gps_data(file_manager.output_dir)
+            
+            if not file_info:
+                print("❌ No GPS data found. Make sure you have activities with GPS tracks.")
+                return
+            
+            print(f"✅ Downloaded GPS data from {len(file_info)} activities")
+            
+            # Process and log each activity
+            for activity_id, info in file_info.items():
+                # Create mock activity data for progress reporter
+                mock_activity = {
+                    'id': activity_id,
+                    'type': info.get('activity_type', 'Unknown'),
+                    'name': info.get('filename', f'Activity_{activity_id}')
+                }
+                progress_reporter.log_activity_processed(
+                    mock_activity, 
+                    info['gps_points_count']
+                )
+            
+            # Save athlete info with file manager
+            athlete_timestamped, athlete_latest = file_manager.save_athlete_info(athlete)
+            progress_reporter.log_file_operation("saved", athlete_timestamped)
+            progress_reporter.log_file_operation("saved", athlete_latest)
+            
+            # Save activities summary
+            summary_timestamped, _ = file_manager.save_json_file(
+                file_info, 
+                f"activities_summary_{file_manager.generate_timestamp()}.json"
+            )
+            progress_reporter.log_file_operation("saved", summary_timestamped, count=len(file_info))
+            
+            # Log rate limit usage
+            progress_reporter.log_rate_limit_info(client)
+            
+            # Show individual file details
+            print(f"\n📁 Individual Activity Files:")
+            for activity_id, info in file_info.items():
+                filename = info['filename']
+                activity_type = info['activity_type']
+                points = info['gps_points_count']
+                print(f"  {filename} - {activity_type} ({points:,} points)")
+            
+            # Show final summary
+            additional_stats = {
+                'Output directory': file_manager.output_dir,
+                'Individual files saved': len(file_info),
+                'Latest files created': 2  # athlete_latest + summary_latest
+            }
+            
+            progress_reporter.show_summary(additional_stats)
+            
+        except Exception as e:
+            progress_reporter.add_error(f"Failed to download GPS data: {e}")
+            import traceback
+            traceback.print_exc()
             return
         
-        # Save athlete info with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        athlete_filename = f"athlete_info_{timestamp}.json"
-        athlete_file = os.path.join(output_dir, athlete_filename)
-        with open(athlete_file, 'w') as f:
-            json.dump(athlete, f, indent=2)
+        print(f"\n🎉 Individual activity download complete! Files saved in: {file_manager.output_dir}")
         
-        print(f"\nAthlete info saved to: {athlete_file}")
-        
-        # Save summary file with all activity information
-        summary_filename = f"activities_summary_{timestamp}.json"
-        summary_file = os.path.join(output_dir, summary_filename)
-        with open(summary_file, 'w') as f:
-            json.dump(file_info, f, indent=2)
-        
-        print(f"Activities summary saved to: {summary_file}")
-        
-        # Also save latest versions for compatibility with existing scripts
-        latest_athlete_file = os.path.join(output_dir, "athlete_info_latest.json")
-        latest_summary_file = os.path.join(output_dir, "activities_summary_latest.json")
-        
-        with open(latest_athlete_file, 'w') as f:
-            json.dump(athlete, f, indent=2)
-        with open(latest_summary_file, 'w') as f:
-            json.dump(file_info, f, indent=2)
-            
-        print(f"Latest versions also saved as: athlete_info_latest.json, activities_summary_latest.json")
-        
-        # Show detailed summary
-        total_points = sum(info['gps_points_count'] for info in file_info.values())
-        print(f"\n📊 Download Summary:")
-        print(f"  Activities with GPS: {len(file_info)}")
-        print(f"  Total GPS points: {total_points:,}")
-        print(f"  Individual files saved: {len(file_info)}")
-        print(f"  Rate limit usage: {client.rate_limiter.short_term_requests}/100")
-        
-        # Show file list
-        print(f"\n📁 Individual Activity Files:")
-        for activity_id, info in file_info.items():
-            print(f"  {info['filename']} - {info['activity_type']} ({info['gps_points_count']} points)")
-            
+    except KeyboardInterrupt:
+        handle_keyboard_interrupt("Individual Activity Download")
     except Exception as e:
-        print(f"Failed to download GPS data: {e}")
+        print(f"❌ Download failed: {e}")
         import traceback
         traceback.print_exc()
-        return
-    
-    print("\nData download complete!")
-    print(f"Files saved in: {output_dir}")
 
 
 if __name__ == "__main__":

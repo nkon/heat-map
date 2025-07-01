@@ -1,193 +1,228 @@
 #!/usr/bin/env python3
 
-import os
-import json
-from typing import Dict, Any
+"""
+Strava Heatmap SVG Generator
+
+Generates SVG heatmaps from Strava GPS data with geographic boundaries.
+Refactored to use centralized utilities for configuration, file operations,
+progress reporting, and data validation.
+"""
+
 from heatmap_generator import HeatmapGenerator
 from map_data import MapDataProvider
 from svg_renderer import SVGRenderer
-
-
-def load_config() -> Dict[str, Any]:
-    config_file = "config.json"
-    if os.path.exists(config_file):
-        with open(config_file, 'r') as f:
-            return json.load(f)
-    
-    # Create default config file
-    default_config = {
-        "data": {
-            "input_dir": "strava_data",
-            "gps_data_file": "gps_data.json"
-        },
-        "output": {
-            "filename": "strava_heatmap.svg",
-            "width": 1200,
-            "height": 800
-        },
-        "style": {
-            "track_color": "#dc3545",
-            "track_width": "1.5",
-            "boundary_color": "#dee2e6",
-            "boundary_width": "0.5"
-        }
-    }
-    
-    with open(config_file, 'w') as f:
-        json.dump(default_config, f, indent=2)
-    
-    print(f"Created {config_file}. Please update it with your settings.")
-    return default_config
-
-
-def load_gps_data(config: Dict[str, Any]) -> Dict[int, Any]:
-    data_config = config["data"]
-    input_dir = data_config["input_dir"]
-    
-    # Try to load latest file first, then fall back to config file
-    latest_file = os.path.join(input_dir, "gps_data_latest.json")
-    config_file = os.path.join(input_dir, data_config["gps_data_file"])
-    
-    gps_data_file = latest_file if os.path.exists(latest_file) else config_file
-    
-    if not os.path.exists(gps_data_file):
-        raise FileNotFoundError(f"GPS data file not found: {gps_data_file}")
-    
-    print(f"Loading GPS data from: {os.path.basename(gps_data_file)}")
-    
-    with open(gps_data_file, 'r') as f:
-        data = json.load(f)
-    
-    # Convert string keys back to integers
-    return {int(k): v for k, v in data.items()}
-
-
-def load_athlete_info(config: Dict[str, Any]) -> Dict[str, Any]:
-    data_config = config["data"]
-    input_dir = data_config["input_dir"]
-    
-    # Try to load latest file first, then fall back to generic file
-    latest_file = os.path.join(input_dir, "athlete_info_latest.json")
-    generic_file = os.path.join(input_dir, "athlete_info.json")
-    
-    athlete_file = latest_file if os.path.exists(latest_file) else generic_file
-    
-    if os.path.exists(athlete_file):
-        print(f"Loading athlete info from: {os.path.basename(athlete_file)}")
-        with open(athlete_file, 'r') as f:
-            return json.load(f)
-    
-    return {"firstname": "Unknown", "lastname": "Athlete"}
+from strava_config import StravaConfig
+from strava_files import StravaFileManager
+from strava_progress import StravaProgressReporter
+from strava_utils import handle_keyboard_interrupt
+from heatmap_utils import (
+    validate_gps_data_structure, 
+    validate_heatmap_config,
+    format_gps_summary,
+    calculate_gps_bounds,
+    estimate_processing_time,
+    calculate_heatmap_resolution
+)
 
 
 def main():
-    print("Strava Heatmap SVG Generator")
-    print("=" * 30)
-    
-    # Load configuration
-    config = load_config()
-    
-    # Load GPS data
-    print("Loading GPS data...")
+    """Main heatmap generation process"""
     try:
-        gps_data = load_gps_data(config)
-        athlete_info = load_athlete_info(config)
+        # Initialize utilities
+        config_manager = StravaConfig()
+        progress_reporter = StravaProgressReporter("Strava Heatmap SVG Generator")
         
-        print(f"Loaded GPS data from {len(gps_data)} activities")
-        print(f"Athlete: {athlete_info['firstname']} {athlete_info['lastname']}")
+        # Start operation
+        progress_reporter.start_operation(
+            "Generates SVG heatmaps from Strava GPS data with geographic boundaries"
+        )
+        
+        # Load and validate configuration
+        print("🔧 Loading configuration...")
+        config = config_manager.load()
+        
+        # Validate heatmap-specific configuration
+        is_valid_config, config_issues = validate_heatmap_config(config)
+        if not is_valid_config:
+            for issue in config_issues:
+                progress_reporter.add_error(f"Configuration error: {issue}")
+            return
+        
+        # Setup file manager
+        file_manager = StravaFileManager(config_manager.get_output_dir())
+        
+        # Load GPS data
+        print("📊 Loading GPS data...")
+        try:
+            data_config = config["data"]
+            gps_data = file_manager.load_json_file(data_config["gps_data_file"])
+            
+            # Convert string keys to integers for backward compatibility
+            if gps_data and isinstance(next(iter(gps_data.keys())), str):
+                gps_data = {int(k): v for k, v in gps_data.items()}
+            
+            # Load athlete info
+            try:
+                athlete_info = file_manager.load_json_file("athlete_info.json")
+            except FileNotFoundError:
+                athlete_info = {"firstname": "Unknown", "lastname": "Athlete"}
+                progress_reporter.add_warning("Athlete info not found, using defaults")
+            
+            progress_reporter.log_file_operation("loaded", f"GPS data ({len(gps_data)} activities)")
+            
+        except FileNotFoundError as e:
+            progress_reporter.add_error(f"GPS data not found: {e}")
+            print("💡 Tip: Run download_strava_data.py or consolidate_gps_data.py first")
+            return
+        except Exception as e:
+            progress_reporter.add_error(f"Failed to load GPS data: {e}")
+            return
+        
+        # Validate GPS data structure
+        print("✅ Validating GPS data...")
+        is_valid_gps, gps_issues = validate_gps_data_structure(gps_data)
+        if not is_valid_gps:
+            for issue in gps_issues[:5]:  # Show first 5 issues
+                progress_reporter.add_error(f"GPS data error: {issue}")
+            if len(gps_issues) > 5:
+                progress_reporter.add_error(f"... and {len(gps_issues) - 5} more GPS data issues")
+            return
         
         if not gps_data:
-            print("No GPS data found. Please run download_strava_data.py first.")
+            progress_reporter.add_error("No valid GPS data found")
             return
-            
-    except Exception as e:
-        print(f"Failed to load GPS data: {e}")
-        return
-    
-    # Generate heatmap
-    print("Generating heatmap...")
-    try:
-        heatmap_gen = HeatmapGenerator()
-        heatmap_grid = heatmap_gen.generate_heatmap(gps_data)
-        bounds = heatmap_gen.get_bounds()
         
-        print(f"Generated heatmap with bounds: {bounds}")
+        # Show GPS data summary
+        print("\n" + format_gps_summary(gps_data))
         
-    except Exception as e:
-        print(f"Failed to generate heatmap: {e}")
-        return
-    
-    # Get map data
-    print("Loading map boundaries...")
-    try:
-        map_provider = MapDataProvider()
-        
-        # Get world boundaries
-        world_data = map_provider.get_world_boundaries()
-        filtered_world = map_provider.filter_boundaries_by_bounds(world_data, bounds)
-        world_paths = map_provider.get_boundary_paths(filtered_world)
-        
-        # Get US states if in US bounds
-        us_bounds = (24, -125, 50, -66)  # Rough US bounds
-        if (bounds[0] >= us_bounds[0] and bounds[1] >= us_bounds[1] and 
-            bounds[2] <= us_bounds[2] and bounds[3] <= us_bounds[3]):
-            us_data = map_provider.get_us_states()
-            filtered_us = map_provider.filter_boundaries_by_bounds(us_data, bounds)
-            us_paths = map_provider.get_boundary_paths(filtered_us)
-            world_paths.extend(us_paths)
-        
-        print(f"Loaded {len(world_paths)} boundary paths")
-        
-    except Exception as e:
-        print(f"Failed to load map data: {e}")
-        print("Continuing without map boundaries...")
-        world_paths = []
-    
-    # Create SVG
-    print("Creating SVG...")
-    try:
+        # Calculate optimal resolution and estimate processing time
         output_config = config["output"]
-        style_config = config["style"]
-        
-        renderer = SVGRenderer(
-            width=output_config["width"],
-            height=output_config["height"]
+        grid_width, grid_height, density = calculate_heatmap_resolution(
+            gps_data, 
+            output_config["width"], 
+            output_config["height"]
         )
         
-        # Create SVG with bounds
-        svg_root = renderer.create_svg(bounds)
+        processing_time = estimate_processing_time(gps_data, grid_width, grid_height)
+        print(f"\n📈 Heatmap settings:")
+        print(f"  Grid resolution: {grid_width} x {grid_height}")
+        print(f"  Point density: {density:.1f} points per grid cell")
+        print(f"  Estimated processing time: {processing_time}")
         
-        # Add boundaries
-        if world_paths:
-            renderer.add_boundary_paths(
-                world_paths,
-                stroke_color=style_config["boundary_color"],
-                stroke_width=style_config["boundary_width"]
+        # Generate heatmap
+        print("\n🔥 Generating heatmap...")
+        try:
+            heatmap_gen = HeatmapGenerator()
+            heatmap_grid = heatmap_gen.generate_heatmap(gps_data)
+            bounds = heatmap_gen.get_bounds()
+            
+            progress_reporter.log_file_operation(
+                "generated", 
+                f"heatmap grid ({heatmap_grid.shape[0]}x{heatmap_grid.shape[1]})"
             )
+            print(f"✅ Generated heatmap with bounds: {bounds}")
+            
+        except Exception as e:
+            progress_reporter.add_error(f"Failed to generate heatmap: {e}")
+            return
         
-        # Add GPS tracks
-        renderer.add_gps_tracks(
-            gps_data,
-            stroke_color=style_config["track_color"],
-            stroke_width=style_config["track_width"]
-        )
+        # Load map boundaries
+        print("\n🗺️  Loading geographic boundaries...")
+        try:
+            map_provider = MapDataProvider()
+            world_paths = []
+            
+            # Get world boundaries
+            print("  Loading world boundaries...")
+            world_data = map_provider.get_world_boundaries()
+            filtered_world = map_provider.filter_boundaries_by_bounds(world_data, bounds)
+            world_paths = map_provider.get_boundary_paths(filtered_world)
+            
+            # Get US states if in US bounds
+            us_bounds = (24, -125, 50, -66)  # Rough US bounds
+            min_lat, max_lat, min_lon, max_lon = bounds
+            if (min_lat >= us_bounds[0] and min_lon >= us_bounds[1] and 
+                max_lat <= us_bounds[2] and max_lon <= us_bounds[3]):
+                print("  Loading US state boundaries...")
+                us_data = map_provider.get_us_states()
+                filtered_us = map_provider.filter_boundaries_by_bounds(us_data, bounds)
+                us_paths = map_provider.get_boundary_paths(filtered_us)
+                world_paths.extend(us_paths)
+            
+            progress_reporter.log_file_operation(
+                "loaded", 
+                f"geographic boundaries ({len(world_paths)} paths)"
+            )
+            
+        except Exception as e:
+            progress_reporter.add_warning(f"Failed to load map boundaries: {e}")
+            progress_reporter.add_warning("Continuing without geographic boundaries")
+            world_paths = []
         
-        # Add title and legend
-        athlete_name = f"{athlete_info['firstname']} {athlete_info['lastname']}"
-        renderer.add_title(f"{athlete_name}'s Strava Activity Heatmap")
-        renderer.add_legend()
+        # Create SVG
+        print("\n🎨 Creating SVG visualization...")
+        try:
+            style_config = config["style"]
+            
+            renderer = SVGRenderer(
+                width=output_config["width"],
+                height=output_config["height"]
+            )
+            
+            # Create SVG with bounds
+            renderer.create_svg(bounds)
+            
+            # Add boundaries first (so tracks appear on top)
+            if world_paths:
+                print(f"  Adding {len(world_paths)} boundary paths...")
+                renderer.add_boundary_paths(
+                    world_paths,
+                    stroke_color=style_config["boundary_color"],
+                    stroke_width=style_config["boundary_width"]
+                )
+            
+            # Add GPS tracks
+            print(f"  Adding GPS tracks from {len(gps_data)} activities...")
+            renderer.add_gps_tracks(
+                gps_data,
+                stroke_color=style_config["track_color"],
+                stroke_width=style_config["track_width"]
+            )
+            
+            # Add title and metadata
+            athlete_name = f"{athlete_info['firstname']} {athlete_info['lastname']}"
+            renderer.add_title(f"{athlete_name}'s Strava Activity Heatmap")
+            renderer.add_legend()
+            
+            # Save SVG
+            output_file = output_config["filename"]
+            renderer.save_svg(output_file)
+            
+            progress_reporter.log_file_operation("saved", output_file)
+            
+        except Exception as e:
+            progress_reporter.add_error(f"Failed to create SVG: {e}")
+            return
         
-        # Save SVG
-        output_file = output_config["filename"]
-        renderer.save_svg(output_file)
+        # Show final summary
+        bounds_info = calculate_gps_bounds(gps_data)
+        additional_stats = {
+            'Output file': output_file,
+            'SVG dimensions': f"{output_config['width']} x {output_config['height']} pixels",
+            'Geographic bounds': f"({bounds_info[0]:.3f}, {bounds_info[2]:.3f}) to ({bounds_info[1]:.3f}, {bounds_info[3]:.3f})",
+            'Boundary paths included': len(world_paths),
+            'Heatmap grid size': f"{grid_width} x {grid_height}"
+        }
         
-        print(f"SVG saved as: {output_file}")
+        progress_reporter.show_summary(additional_stats)
+        print(f"\n🎉 Heatmap generation complete! SVG saved as: {output_file}")
         
+    except KeyboardInterrupt:
+        handle_keyboard_interrupt("Heatmap Generation")
     except Exception as e:
-        print(f"Failed to create SVG: {e}")
-        return
-    
-    print("\nHeatmap generation complete!")
+        print(f"❌ Heatmap generation failed: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 if __name__ == "__main__":
