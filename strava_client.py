@@ -241,3 +241,53 @@ class StravaClient:
             # Rate limiting is now handled in _make_request
             
         return gps_data
+    
+    def download_individual_activity_gps_data(self, output_dir: str) -> Dict[str, Any]:
+        """Download GPS data for each activity and save to individual files"""
+        activities = self.get_all_activities()
+        file_info = {}
+        
+        for activity in activities:
+            activity_id = activity['id']
+            activity_type = activity.get('type', 'Unknown')
+            activity_date = activity.get('start_date', '').split('T')[0]  # Extract date part
+            activity_name = activity.get('name', f'Activity_{activity_id}')
+            
+            # Skip non-GPS activities
+            if activity_type in ['WeightTraining', 'Yoga', 'Workout']:
+                continue
+                
+            print(f"Downloading GPS data for activity {activity_id} ({activity_type}) - {activity_date}")
+            gps_points = self.download_activity_gps_data(activity_id)
+            
+            if gps_points:
+                # Create filename with date and activity info
+                safe_name = ''.join(c for c in activity_name if c.isalnum() or c in ' -_').strip()[:50]
+                filename = f"activity_{activity_date}_{activity_id}_{safe_name}.json"
+                filepath = os.path.join(output_dir, filename)
+                
+                # Save individual activity file
+                activity_data = {
+                    'activity_id': activity_id,
+                    'activity_type': activity_type,
+                    'activity_name': activity_name,
+                    'start_date': activity['start_date'],
+                    'gps_points': gps_points,
+                    'total_points': len(gps_points)
+                }
+                
+                with open(filepath, 'w') as f:
+                    json.dump(activity_data, f, indent=2)
+                
+                file_info[activity_id] = {
+                    'filename': filename,
+                    'filepath': filepath,
+                    'activity_type': activity_type,
+                    'activity_name': activity_name,
+                    'start_date': activity['start_date'],
+                    'gps_points_count': len(gps_points)
+                }
+                
+                print(f"  Saved {len(gps_points)} GPS points to {filename}")
+            
+        return file_info

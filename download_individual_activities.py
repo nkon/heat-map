@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 
+"""
+Download individual activity GPS data from Strava
+Each activity is saved as a separate JSON file with date in filename
+"""
+
 import os
 import json
 import time
@@ -116,8 +121,8 @@ def authenticate_strava(config: Dict[str, Any]) -> StravaClient:
 
 
 def main():
-    print("Strava GPS Data Downloader")
-    print("=" * 30)
+    print("Strava Individual Activity GPS Data Downloader")
+    print("=" * 50)
     
     # Load configuration
     config = load_config()
@@ -183,13 +188,18 @@ def main():
             
         print(f"Latest versions also saved as: athlete_info_latest.json, activities_summary_latest.json")
         
-        # Show summary
+        # Show detailed summary
         total_points = sum(info['gps_points_count'] for info in file_info.values())
         print(f"\n📊 Download Summary:")
         print(f"  Activities with GPS: {len(file_info)}")
         print(f"  Total GPS points: {total_points:,}")
         print(f"  Individual files saved: {len(file_info)}")
         print(f"  Rate limit usage: {client.rate_limiter.short_term_requests}/100")
+        
+        # Show file list
+        print(f"\n📁 Individual Activity Files:")
+        for activity_id, info in file_info.items():
+            print(f"  {info['filename']} - {info['activity_type']} ({info['gps_points_count']} points)")
             
     except Exception as e:
         print(f"Failed to download GPS data: {e}")
