@@ -48,7 +48,8 @@ class SVGRenderer:
         
         return x, y
     
-    def create_svg(self, bounds: Tuple[float, float, float, float]) -> ET.Element:
+    def create_svg(self, bounds: Tuple[float, float, float, float], 
+                   background_color: str = '#ffffff') -> ET.Element:
         self.setup_projection(bounds)
         
         self.svg_root = ET.Element('svg')
@@ -57,14 +58,52 @@ class SVGRenderer:
         self.svg_root.set('xmlns', 'http://www.w3.org/2000/svg')
         self.svg_root.set('viewBox', f'0 0 {self.width} {self.height}')
         
-        # Add background
+        # Add configurable background
         background = ET.SubElement(self.svg_root, 'rect')
         background.set('width', '100%')
         background.set('height', '100%')
-        background.set('fill', '#f8f9fa')
+        background.set('fill', background_color)
         
         return self.svg_root
     
+    def add_map_background(self, boundary_paths: List[List[Tuple[float, float]]], 
+                          land_color: str = '#e8f5e8', water_color: str = '#b3d9ff',
+                          stroke_color: str = '#dee2e6', stroke_width: str = '0.5'):
+        """Add map background with land and water areas"""
+        if not self.svg_root:
+            raise ValueError("SVG not initialized")
+        
+        # Change the background to water color
+        background = self.svg_root.find('.//rect[@width="100%"]')
+        if background is not None:
+            background.set('fill', water_color)
+        
+        # Add land areas (filled boundaries)
+        map_group = ET.SubElement(self.svg_root, 'g')
+        map_group.set('id', 'map-background')
+        
+        for path in boundary_paths:
+            if len(path) < 3:  # Need at least 3 points for a polygon
+                continue
+            
+            svg_path = ET.SubElement(map_group, 'path')
+            
+            path_data = []
+            for i, (lat, lon) in enumerate(path):
+                x, y = self.lat_lon_to_svg(lat, lon)
+                if i == 0:
+                    path_data.append(f'M {x:.2f} {y:.2f}')
+                else:
+                    path_data.append(f'L {x:.2f} {y:.2f}')
+            
+            # Close path to make it a polygon
+            path_data.append('Z')
+            
+            svg_path.set('d', ' '.join(path_data))
+            svg_path.set('fill', land_color)
+            svg_path.set('stroke', stroke_color)
+            svg_path.set('stroke-width', stroke_width)
+
     def add_boundary_paths(self, boundary_paths: List[List[Tuple[float, float]]], 
                           stroke_color: str = '#dee2e6', stroke_width: str = '0.5'):
         if not self.svg_root:

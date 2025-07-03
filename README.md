@@ -5,13 +5,33 @@ StravaのGPSデータから美しいヒートマップを生成するPythonア�
 ## ✨ 主要機能
 
 - 🔥 **高品質ヒートマップ生成**: GPS軌跡を美しいSVGヒートマップに変換
-- 🌍 **地理境界線表示**: 国境・州境界を自動取得・表示
+- 🗺️ **詳細地理境界システム**: 多層階層境界線（国境・都道府県・州・市・湖）
+- 🌏 **自動地域判定**: GPS範囲に基づく適切な境界データ自動選択
+- 🎨 **設定ベーススタイリング**: 境界タイプ別の色・線幅・表示制御
 - 🔄 **自動レート制限管理**: Strava APIの制限を自動検知・回避
 - 🔐 **スマート認証**: 自動トークンリフレッシュ・永続化
 - 📊 **進捗レポート**: リアルタイム処理状況・統計表示
 - 💾 **データ管理**: 個別アクティビティファイル・バックアップ管理
 - ⚡ **高性能処理**: 大量データ対応・Ctrl-C割り込み対応
-- 🎨 **カスタマイズ可能**: 色・サイズ・スタイル設定
+- 🎨 **完全カスタマイズ**: config.jsonベースの柔軟な設定システム
+
+## 📸 サンプル
+
+### ミネソタ州ヒートマップ例
+ミネソタ州内の403アクティビティ（1,947,578 GPS点）から生成されたヒートマップ：
+
+![ミネソタ州ヒートマップ](images/strava_heatmap_minnesota.png)
+
+*ミネソタ州地域フィルタリング（`--region minnesota`）による結果*
+- **データ**: 403アクティビティ、約195万GPS点
+- **範囲**: 43.6°N-48.4°N, 96.2°W-90.5°W（5年間の活動記録） 
+- **境界**: 州境界（8本）+ 湖境界（15本）、市境界は非表示
+- **設定**: 3600x3600ピクセル、2.0幅GPS軌跡、1.0幅境界線
+
+**地域フィルタリング機能の例:**
+- `--region japan`: 日本のみ（20アクティビティ）
+- `--region usa`: アメリカ全域（465アクティビティ）
+- `--region saint_paul_100km`: セントポール半径100km（339アクティビティ）
 
 ## 🚀 クイックスタート
 
@@ -64,8 +84,25 @@ python consolidate_gps_data.py
 ```
 
 ### 🔥 ヒートマップ生成
+
+#### 全データ（デフォルト）
 ```bash
-python generate_heatmap_svg.py
+source venv/bin/activate && python generate_heatmap_svg.py
+```
+
+#### 地域別フィルタリング
+```bash
+# 日本のみ
+source venv/bin/activate && python generate_heatmap_svg.py --region japan
+
+# アメリカのみ
+source venv/bin/activate && python generate_heatmap_svg.py --region usa
+
+# ミネソタ州のみ
+source venv/bin/activate && python generate_heatmap_svg.py --region minnesota
+
+# セントポール半径100kmのみ
+source venv/bin/activate && python generate_heatmap_svg.py --region saint_paul_100km
 ```
 
 ## ⚙️ 設定
@@ -82,18 +119,61 @@ python generate_heatmap_svg.py
   },
   "data": {
     "output_dir": "strava_data",
+    "input_dir": "strava_data",
     "gps_data_file": "gps_data.json"
   },
   "output": {
     "filename": "strava_heatmap.svg",
-    "width": 1200,
-    "height": 800
+    "width": 3600,
+    "height": 3600
   },
   "style": {
-    "track_color": "#dc3545",
-    "track_width": "1.5",
-    "boundary_color": "#dee2e6",
-    "boundary_width": "0.5"
+    "background_color": "#ffffff",
+    "track_color": "#ff0000",
+    "track_width": "2.0",
+    "track_opacity": "0.7",
+    "boundary_color": "#000000",
+    "boundary_width": "0.8",
+    "boundary_fill": "none"
+  },
+  "boundaries": {
+    "world": {
+      "enabled": true,
+      "color": "#000000",
+      "width": "1.0",
+      "note": "World boundaries are automatically skipped in Japan/USA regions to use detailed boundaries instead"
+    },
+    "japan": {
+      "enabled": true,
+      "prefectures": {
+        "enabled": true,
+        "color": "#000000",
+        "width": "1.0"
+      },
+      "lakes": {
+        "enabled": true,
+        "color": "#000000",
+        "width": "1.0"
+      }
+    },
+    "usa": {
+      "enabled": true,
+      "states": {
+        "enabled": true,
+        "color": "#000000",
+        "width": "1.0"
+      },
+      "lakes": {
+        "enabled": true,
+        "color": "#000000",
+        "width": "1.0"
+      },
+      "minnesota_cities": {
+        "enabled": false,
+        "color": "#999999",
+        "width": "0.3"
+      }
+    }
   },
   "download": {
     "max_years": 8,
@@ -104,6 +184,29 @@ python generate_heatmap_svg.py
   }
 }
 ```
+
+### 🗺️ 境界設定の詳細
+
+**統一されたスタイリング:**
+- **全境界線**: 黒色（#000000）、1.0幅で統一
+- **GPSトラック**: 赤色（#ff0000）、2.0幅で視認性向上
+- **背景**: 白色（#ffffff）でクリーンな表示
+
+**階層構造:**
+- **World**: 国境・海岸線（日本・アメリカ地域では自動スキップ）
+- **Japan**: 都道府県境界 + 湖境界
+- **USA**: 州境界 + 湖境界
+- **Minnesota Cities**: 無効化（enabled: false）
+
+**地域フィルタリング機能:**
+- **Japan**: 24°-46°N, 123°-146°E（日本列島全域）
+- **USA**: 24°-72°N, 180°-66°W（アラスカ含むアメリカ全域）
+- **Minnesota**: 43.5°-49.4°N, 97.2°-89.5°W（ミネソタ州境界）
+- **Saint Paul 100km**: セントポール中心半径100km（Haversine距離計算）
+
+**自動地域判定:**
+- GPS範囲に基づいて適切な境界データを自動選択
+- 地域フィルタリング時は不要な境界データをスキップしてパフォーマンス向上
 
 ## 🏗️ アーキテクチャ
 
@@ -125,7 +228,7 @@ python generate_heatmap_svg.py
 ├── 🗺️ **ヒートマップコア**
 │   ├── heatmap_generator.py             # ヒートマップアルゴリズム
 │   ├── heatmap_utils.py                 # ヒートマップユーティリティ
-│   ├── map_data.py                      # 地理データ取得
+│   ├── map_data.py                      # 多層階層地理データ取得・管理
 │   └── svg_renderer.py                  # SVGレンダリング
 ├── 🔗 **Strava統合**
 │   └── strava_client.py                 # Strava APIクライアント
@@ -150,8 +253,8 @@ python generate_heatmap_svg.py
 #### **ヒートマップエンジン**
 - **`heatmap_generator.py`**: Bresenhamアルゴリズムによるヒートマップ生成
 - **`heatmap_utils.py`**: GPS検証・境界計算・パフォーマンス推定
-- **`map_data.py`**: 地理境界データのダウンロード・キャッシュ管理
-- **`svg_renderer.py`**: 正距円筒図法によるSVGレンダリング
+- **`map_data.py`**: 多層階層地理データ管理（国境・都道府県・州・市・湖）
+- **`svg_renderer.py`**: 正距円筒図法による設定ベースSVGレンダリング
 
 #### **Strava統合**
 - **`strava_client.py`**: Strava API統合（自動トークン管理・レート制限）
@@ -222,8 +325,8 @@ python background_download.py
 ```json
 {
   "output": {
-    "width": 2400,
-    "height": 1600
+    "width": 24000,
+    "height": 16000
   }
 }
 ```
@@ -232,10 +335,37 @@ python background_download.py
 ```json
 {
   "style": {
+    "background_color": "#f0f8ff",
     "track_color": "#ff6b35",
     "track_width": "2.0",
-    "boundary_color": "#2c3e50",
-    "boundary_width": "0.8"
+    "track_opacity": "0.8"
+  }
+}
+```
+
+#### 境界表示カスタマイズ
+```json
+{
+  "boundaries": {
+    "world": {
+      "enabled": true,
+      "color": "#2c3e50",
+      "width": "1.2"
+    },
+    "japan": {
+      "prefectures": {
+        "enabled": false
+      }
+    },
+    "usa": {
+      "states": {
+        "color": "#34495e",
+        "width": "0.8"
+      },
+      "minnesota_cities": {
+        "enabled": false
+      }
+    }
   }
 }
 ```
@@ -288,20 +418,28 @@ python download_individual_activities.py
 
 ## 🏆 成果事例
 
-- ✅ **8年間のStravaデータ**: 93アクティビティ、552,019 GPS点の処理実績
-- ✅ **地理的カバレッジ**: 北米西部〜中西部（36.6°N-47.7°N, 122.5°W-90.5°W）
-- ✅ **アクティビティタイプ**: サイクリング、ハイキング、ランニング、スキー、マウンテンバイク
-- ✅ **プロダクション品質**: エラーハンドリング、レート制限、データ検証すべて対応
+- ✅ **大規模データ処理**: 485アクティビティ、2,613,174 GPS点の処理実績
+- ✅ **広域地理的カバレッジ**: 日本〜アメリカ全域（24.7°N-48.8°N, 123.9°W-135.7°E）
+- ✅ **多様なアクティビティ**: サイクリング、ハイキング、ランニング、ノルディックスキー、マウンテンバイク等
+- ✅ **地域別フィルタリング**: 日本（20活動）、アメリカ（465活動）、ミネソタ州（403活動）、セントポール100km（339活動）
+- ✅ **統一されたビジュアルデザイン**: 3600x3600ピクセル、2.0幅GPS軌跡、1.0幅境界線で一貫性のある表示
+- ✅ **プロダクション品質**: エラーハンドリング、レート制限、データ検証、設定ベース制御すべて対応
 
-## 🔄 最近の改善 (2025-07-01)
+## 🔄 最近の改善
 
-### リファクタリング成果
+### 2025-07-01: 大規模リファクタリング
 - **950+行のコード重複削除**: 設定・認証・ファイル操作・進捗レポートの中央化
 - **47%のコード削減**: メインスクリプトの簡素化・保守性向上
 - **統一されたエラーハンドリング**: 全スクリプトでの一貫したエラー処理
 - **向上したCtrl-C対応**: 1秒以内の応答性・安全な中断処理
 
-### 新機能
+### 2025-07-02: 地域フィルタリング機能追加
+- **コマンドライン地域フィルタリング**: `--region japan|usa|minnesota|saint_paul_100km`
+- **Haversine距離計算**: セントポール半径100km精密フィルタリング
+- **自動境界最適化**: 地域に応じた不要境界データスキップ
+- **統一ビジュアルデザイン**: 3600x3600ピクセル、太GPS軌跡（2.0）、統一境界線（1.0）
+
+### 継続的な機能強化
 - **GPS データ検証**: 完全性チェック・破損データ検出
 - **処理時間推定**: 実行前の時間・リソース予測  
 - **地理的サマリー**: 自動的な範囲・密度分析

@@ -312,6 +312,97 @@ def validate_heatmap_config(config: Dict[str, Any]) -> Tuple[bool, List[str]]:
     return len(issues) == 0, issues
 
 
+def filter_gps_data_by_region(gps_data: Dict[int, Dict], region: str) -> Dict[int, Dict]:
+    """
+    Filter GPS data by geographic region
+    
+    Args:
+        gps_data: Dictionary with activity IDs as keys and activity data as values
+        region: Region filter ('japan', 'usa', 'minnesota', 'saint_paul_100km', or 'all')
+    
+    Returns:
+        Filtered GPS data dictionary
+    """
+    if region == 'all':
+        return gps_data
+    
+    import math
+    
+    def distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        """Calculate distance between two points in km using Haversine formula"""
+        R = 6371  # Earth's radius in km
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = (math.sin(dlat/2) * math.sin(dlat/2) +
+             math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+             math.sin(dlon/2) * math.sin(dlon/2))
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+        return R * c
+    
+    def is_in_japan(lat: float, lon: float) -> bool:
+        """Check if coordinates are in Japan (rough bounds)"""
+        return 24 <= lat <= 46 and 123 <= lon <= 146
+    
+    def is_in_usa(lat: float, lon: float) -> bool:
+        """Check if coordinates are in USA (rough bounds)"""
+        return 24 <= lat <= 72 and -180 <= lon <= -66
+    
+    def is_in_minnesota(lat: float, lon: float) -> bool:
+        """Check if coordinates are in Minnesota"""
+        return 43.5 <= lat <= 49.4 and -97.2 <= lon <= -89.5
+    
+    def is_in_saint_paul_100km(lat: float, lon: float) -> bool:
+        """Check if coordinates are within 100km of Saint Paul, MN"""
+        # Saint Paul coordinates: 44.9537, -93.0900
+        saint_paul_lat, saint_paul_lon = 44.9537, -93.0900
+        return distance_km(lat, lon, saint_paul_lat, saint_paul_lon) <= 100
+    
+    filtered_data = {}
+    
+    for activity_id, gps_points in gps_data.items():
+        # Handle both consolidated format (activity_id -> [gps_points]) 
+        # and individual format (activity_id -> {gps_points: [...]})
+        if isinstance(gps_points, list):
+            points_list = gps_points
+        elif isinstance(gps_points, dict) and 'gps_points' in gps_points:
+            points_list = gps_points['gps_points']
+        else:
+            continue
+            
+        filtered_points = []
+        
+        for point in points_list:
+            if len(point) < 2:
+                continue
+                
+            lat, lon = point[0], point[1]
+            
+            include_point = False
+            if region == 'japan':
+                include_point = is_in_japan(lat, lon)
+            elif region == 'usa':
+                include_point = is_in_usa(lat, lon)
+            elif region == 'minnesota':
+                include_point = is_in_minnesota(lat, lon)
+            elif region == 'saint_paul_100km':
+                include_point = is_in_saint_paul_100km(lat, lon)
+            
+            if include_point:
+                filtered_points.append(point)
+        
+        # Include activity only if it has GPS points in the region
+        if filtered_points:
+            # Maintain the same data structure as input
+            if isinstance(gps_points, list):
+                filtered_data[activity_id] = filtered_points
+            else:
+                filtered_activity = gps_points.copy()
+                filtered_activity['gps_points'] = filtered_points
+                filtered_data[activity_id] = filtered_activity
+    
+    return filtered_data
+
+
 def create_cache_directory(cache_dir: str) -> str:
     """
     Create cache directory if it doesn't exist
