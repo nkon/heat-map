@@ -1,6 +1,11 @@
 import xml.etree.ElementTree as ET
 from typing import List, Tuple, Dict, Any
 import math
+try:
+    from pyproj import Transformer
+    PYPROJ_AVAILABLE = True
+except ImportError:
+    PYPROJ_AVAILABLE = False
 
 
 class SVGRenderer:
@@ -9,8 +14,19 @@ class SVGRenderer:
         self.height = height
         self.svg_root = None
         self.projection = None
+        self.utm_transformer = None
+        self.projection_type = 'equirectangular'
         
-    def setup_projection(self, bounds: Tuple[float, float, float, float]):
+    def setup_projection(self, bounds: Tuple[float, float, float, float], projection_type: str = 'equirectangular'):
+        min_lat, min_lon, max_lat, max_lon = bounds
+        self.projection_type = projection_type
+        
+        if projection_type == 'utm' and PYPROJ_AVAILABLE:
+            self._setup_utm_projection(bounds)
+        else:
+            self._setup_equirectangular_projection(bounds)
+    
+    def _setup_equirectangular_projection(self, bounds: Tuple[float, float, float, float]):
         min_lat, min_lon, max_lat, max_lon = bounds
         
         # Simple equirectangular projection with aspect ratio correction
@@ -36,10 +52,50 @@ class SVGRenderer:
             'offset_y': self.height / 2
         }
     
+    def _setup_utm_projection(self, bounds: Tuple[float, float, float, float]):
+        min_lat, min_lon, max_lat, max_lon = bounds
+        
+        # UTM Zone 15N for Minnesota region
+        # EPSG:32615 is UTM Zone 15N
+        self.utm_transformer = Transformer.from_crs('EPSG:4326', 'EPSG:32615', always_xy=True)
+        
+        # Convert bounds to UTM coordinates
+        min_x, min_y = self.utm_transformer.transform(min_lon, min_lat)
+        max_x, max_y = self.utm_transformer.transform(max_lon, max_lat)
+        
+        # Calculate ranges in UTM coordinates (meters)
+        x_range = max_x - min_x
+        y_range = max_y - min_y
+        
+        # Calculate scale to fit both dimensions
+        x_scale = self.width / x_range
+        y_scale = self.height / y_range
+        
+        # Use the smaller scale to ensure everything fits
+        scale = min(x_scale, y_scale) * 0.9  # 90% to add some margin
+        
+        # Center the projection
+        center_x = (min_x + max_x) / 2
+        center_y = (min_y + max_y) / 2
+        
+        self.projection = {
+            'scale': scale,
+            'center_x': center_x,
+            'center_y': center_y,
+            'offset_x': self.width / 2,
+            'offset_y': self.height / 2
+        }
+    
     def lat_lon_to_svg(self, lat: float, lon: float) -> Tuple[float, float]:
         if not self.projection:
             raise ValueError("Projection not set up")
         
+        if self.projection_type == 'utm' and self.utm_transformer:
+            return self._lat_lon_to_svg_utm(lat, lon)
+        else:
+            return self._lat_lon_to_svg_equirectangular(lat, lon)
+    
+    def _lat_lon_to_svg_equirectangular(self, lat: float, lon: float) -> Tuple[float, float]:
         proj = self.projection
         
         # Convert lat/lon to x/y coordinates
@@ -48,9 +104,21 @@ class SVGRenderer:
         
         return x, y
     
+    def _lat_lon_to_svg_utm(self, lat: float, lon: float) -> Tuple[float, float]:
+        proj = self.projection
+        
+        # Convert lat/lon to UTM coordinates
+        utm_x, utm_y = self.utm_transformer.transform(lon, lat)
+        
+        # Convert UTM to SVG coordinates
+        x = (utm_x - proj['center_x']) * proj['scale'] + proj['offset_x']
+        y = (proj['center_y'] - utm_y) * proj['scale'] + proj['offset_y']  # Flip Y axis
+        
+        return x, y
+    
     def create_svg(self, bounds: Tuple[float, float, float, float], 
-                   background_color: str = '#ffffff') -> ET.Element:
-        self.setup_projection(bounds)
+                   background_color: str = '#ffffff', projection_type: str = 'equirectangular') -> ET.Element:
+        self.setup_projection(bounds, projection_type)
         
         self.svg_root = ET.Element('svg')
         self.svg_root.set('width', str(self.width))

@@ -201,8 +201,16 @@ Examples:
                 height=output_config["height"]
             )
             
+            # Determine projection type based on region
+            projection_type = 'equirectangular'  # default
+            if args.region in ['minnesota', 'saint_paul_100km']:
+                projection_type = 'utm'
+                print(f"  Using UTM Zone 15N projection for {args.region} region...")
+            else:
+                print(f"  Using equirectangular projection...")
+            
             # Create SVG with bounds and background color
-            renderer.create_svg(bounds, style_config["background_color"])
+            renderer.create_svg(bounds, style_config["background_color"], projection_type)
             
             # Add detailed boundary lines based on configuration
             boundary_config = config.get("boundaries", {})
