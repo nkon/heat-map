@@ -9,6 +9,7 @@ progress reporting, and data validation.
 """
 
 import argparse
+import json
 from heatmap_generator import HeatmapGenerator
 from map_data import MapDataProvider
 from svg_renderer import SVGRenderer
@@ -286,6 +287,48 @@ Examples:
                 stroke_width=style_config["track_width"],
                 opacity=style_config["track_opacity"]
             )
+            
+            # Add state parks if enabled and we're in a Minnesota region
+            if args.region in ['minnesota', 'saint_paul_100km']:
+                parks_config = boundary_config.get("usa", {}).get("state_parks", {})
+                if parks_config.get("enabled", False):
+                    try:
+                        parks_file = parks_config.get("data_file", "map_cache/minnesota_state_parks.json")
+                        print(f"  Loading state parks from {parks_file}...")
+                        
+                        with open(parks_file, 'r') as f:
+                            parks_data = json.load(f)
+                        
+                        # Get individual park settings
+                        park_settings = config.get("minnesota_state_parks", {})
+                        
+                        if parks_data.get("features"):
+                            # Filter parks based on individual settings
+                            enabled_parks = []
+                            for park in parks_data["features"]:
+                                park_name = park.get("properties", {}).get("name", "")
+                                if park_settings.get(park_name, True):  # Default to True if not specified
+                                    enabled_parks.append(park)
+                            
+                            if enabled_parks:
+                                print(f"  Adding {len(enabled_parks)} state parks (filtered from {len(parks_data['features'])} total)...")
+                                renderer.add_state_parks(
+                                    enabled_parks,
+                                    stroke_color=parks_config.get("color", "#ff0000"),
+                                    fill_color=parks_config.get("fill", "none"),
+                                    radius=parks_config.get("radius", 20),
+                                    stroke_width=parks_config.get("stroke_width", 2)
+                                )
+                            else:
+                                print("  No state parks enabled in configuration")
+                        else:
+                            print("  No state parks found in data file")
+                    except FileNotFoundError:
+                        progress_reporter.add_warning(f"State parks file not found: {parks_file}")
+                    except Exception as e:
+                        progress_reporter.add_warning(f"Failed to load state parks: {e}")
+                else:
+                    print("  State parks rendering disabled in configuration")
             
             # Add title and metadata
             athlete_name = f"{athlete_info['firstname']} {athlete_info['lastname']}"

@@ -9,6 +9,7 @@ This is a professional-grade Python application that downloads GPS data from Str
 **Key Features:**
 - Regional GPS filtering (Japan, USA, Minnesota, Saint Paul 100km radius)
 - Multi-layer geographic boundary rendering (prefectures, states, lakes)
+- Minnesota state parks visualization (59 parks with individual control)
 - Unified visual design (3600x3600 pixels, 2.0 width GPS tracks)
 - Automatic boundary optimization for performance
 - PNG export capabilities for documentation
@@ -299,8 +300,29 @@ flowchart TD
         "enabled": true,
         "color": "#999999",
         "width": "0.3"
+      },
+      "state_parks": {
+        "enabled": true,
+        "color": "#0000ff",
+        "fill": "none",
+        "radius": 10,
+        "stroke_width": 2,
+        "data_file": "map_cache/minnesota_state_parks.json"
       }
     }
+  },
+  "minnesota_state_parks": {
+    "Afton State Park": true,
+    "Banning State Park": true,
+    "Bear Head Lake State Park": false,
+    "Blue Mounds State Park": true,
+    "Cascade River State Park": true,
+    "Itasca State Park": true,
+    "John A. Latsch State Park": false,
+    "Maplewood State Park": true,
+    "Split Rock Lighthouse State Park": true,
+    "Temperance River State Park": true,
+    "Whitewater State Park": true
   },
   "download": {
     "max_years": 8,
@@ -322,6 +344,7 @@ flowchart TD
 - **New**: Region-specific boundary settings (Japan, USA, Minnesota)
 - **New**: Customizable colors, widths, and enable/disable flags for all boundary types
 - **New**: Automatic geographic region detection and boundary loading
+- **New**: Minnesota state parks individual control system (59 parks)
 
 ## Detailed Boundary System (2025-07-02)
 
@@ -369,6 +392,76 @@ flowchart TD
 - Automatic cache management and updates
 - Offline operation after initial download
 
+## Minnesota State Parks System (2025-07-07)
+
+### 🏞️ State Parks Features
+
+**Comprehensive Parks Database:**
+- **59 Minnesota state parks**: Complete coverage including state parks, recreation areas, and monuments
+- **Accurate GPS coordinates**: Verified latitude/longitude for precise positioning
+- **Individual control**: Each park can be enabled/disabled independently
+- **Automatic display**: Parks shown only in Minnesota regions (minnesota, saint_paul_100km)
+
+**Configuration Structure:**
+```json
+{
+  "boundaries": {
+    "usa": {
+      "state_parks": {
+        "enabled": true,
+        "color": "#0000ff",
+        "fill": "none", 
+        "radius": 10,
+        "stroke_width": 2,
+        "data_file": "map_cache/minnesota_state_parks.json"
+      }
+    }
+  },
+  "minnesota_state_parks": {
+    "Itasca State Park": true,
+    "Gooseberry Falls State Park": true,
+    "Split Rock Lighthouse State Park": true,
+    "Bear Head Lake State Park": false,
+    "Franz Jevne State Park": false
+  }
+}
+```
+
+**Data File Structure (map_cache/minnesota_state_parks.json):**
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Itasca State Park",
+        "type": "State Park",
+        "city": "Park Rapids"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-95.2097, 47.1926]
+      }
+    }
+  ]
+}
+```
+
+**Visual Styling:**
+- **Circle markers**: Configurable radius (default 10 pixels)
+- **Customizable colors**: Default blue (#0000ff), fully configurable
+- **Stroke control**: Adjustable line width (default 2px)
+- **Fill options**: None by default, can be customized
+- **Tooltips**: Park names displayed on hover
+
+**Parks Included:**
+- Major parks: Itasca, Gooseberry Falls, Split Rock Lighthouse, Tettegouche
+- North Shore parks: Temperance River, Cascade River, Judge C.R. Magney
+- Metro area parks: Afton, Fort Snelling, William O'Brien
+- Southern parks: Blue Mounds, Whitewater, Forestville/Mystery Cave
+- All other Minnesota state parks, recreation areas, and select monuments
+
 ## Dependencies
 
 ### Core Dependencies
@@ -404,7 +497,9 @@ athlete_info_latest.json            # Athlete information
 **Output Files:**
 ```
 strava_heatmap.svg                  # Generated heatmap
+strava_heatmap_minnesota.svg        # Minnesota region heatmap with state parks
 map_cache/                          # Geographic boundary cache
+map_cache/minnesota_state_parks.json  # Minnesota state parks coordinate data
 ```
 
 ### 🔄 Automatic File Management
@@ -556,6 +651,13 @@ map_cache/                          # Geographic boundary cache
 - Add new regions to `filter_gps_data_by_region()` function
 
 **Recent Feature Additions:**
+
+**2025-07-07: Minnesota State Parks System:**
+- **59 state parks database**: Complete coverage with accurate GPS coordinates
+- **Individual park control**: Enable/disable each park individually via config.json
+- **Customizable styling**: Color, size, stroke width fully configurable
+- **Automatic display**: Shows only in Minnesota regions (minnesota, saint_paul_100km)
+- **Circle markers**: 10-pixel radius blue circles with park name tooltips
 
 **2025-07-03: UTM Zone 15N Projection System:**
 - **High-accuracy projection** for Minnesota and Saint Paul regions using UTM Zone 15N (EPSG:32615)

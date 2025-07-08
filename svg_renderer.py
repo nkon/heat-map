@@ -282,18 +282,50 @@ class SVGRenderer:
         title_text.set('fill', '#333')
         title_text.text = title
     
+    def add_state_parks(self, state_parks_data: List[Dict[str, Any]], 
+                       stroke_color: str = '#ff0000', fill_color: str = 'none',
+                       radius: int = 20, stroke_width: int = 2):
+        """Add state parks as circles to the SVG"""
+        if not self.svg_root:
+            raise ValueError("SVG not initialized")
+        
+        parks_group = ET.SubElement(self.svg_root, 'g')
+        parks_group.set('id', 'state-parks')
+        
+        for park in state_parks_data:
+            geometry = park.get('geometry', {})
+            coordinates = geometry.get('coordinates', [])
+            properties = park.get('properties', {})
+            
+            if len(coordinates) >= 2:
+                lon, lat = coordinates[0], coordinates[1]
+                x, y = self.lat_lon_to_svg(lat, lon)
+                
+                # Create circle element
+                circle = ET.SubElement(parks_group, 'circle')
+                circle.set('cx', f'{x:.2f}')
+                circle.set('cy', f'{y:.2f}')
+                circle.set('r', str(radius))
+                circle.set('stroke', stroke_color)
+                circle.set('stroke-width', str(stroke_width))
+                circle.set('fill', fill_color)
+                
+                # Add park name as title for tooltips
+                title = ET.SubElement(circle, 'title')
+                title.text = properties.get('name', 'State Park')
+
     def add_legend(self):
         if not self.svg_root:
             raise ValueError("SVG not initialized")
         
         legend_group = ET.SubElement(self.svg_root, 'g')
         legend_group.set('id', 'legend')
-        legend_group.set('transform', f'translate({self.width - 150}, {self.height - 80})')
+        legend_group.set('transform', f'translate({self.width - 150}, {self.height - 100})')
         
         # Legend background
         legend_bg = ET.SubElement(legend_group, 'rect')
         legend_bg.set('width', '140')
-        legend_bg.set('height', '70')
+        legend_bg.set('height', '90')
         legend_bg.set('fill', 'white')
         legend_bg.set('stroke', '#ccc')
         legend_bg.set('stroke-width', '1')
@@ -332,6 +364,23 @@ class SVGRenderer:
         boundary_text.set('font-size', '12')
         boundary_text.set('fill', '#333')
         boundary_text.text = 'Boundaries'
+        
+        # State parks legend
+        park_circle = ET.SubElement(legend_group, 'circle')
+        park_circle.set('cx', '20')
+        park_circle.set('cy', '60')
+        park_circle.set('r', '8')
+        park_circle.set('stroke', '#ff0000')
+        park_circle.set('stroke-width', '2')
+        park_circle.set('fill', 'none')
+        
+        park_text = ET.SubElement(legend_group, 'text')
+        park_text.set('x', '35')
+        park_text.set('y', '65')
+        park_text.set('font-family', 'Arial, sans-serif')
+        park_text.set('font-size', '12')
+        park_text.set('fill', '#333')
+        park_text.text = 'State Parks'
     
     def save_svg(self, filename: str):
         if not self.svg_root:
