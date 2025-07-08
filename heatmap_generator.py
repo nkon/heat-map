@@ -26,9 +26,9 @@ class HeatmapGenerator:
         min_lat, max_lat = min(lats), max(lats)
         min_lon, max_lon = min(lons), max(lons)
         
-        # Add small margin
-        lat_margin = (max_lat - min_lat) * 0.05
-        lon_margin = (max_lon - min_lon) * 0.05
+        # Add larger margin to ensure all boundary features are included
+        lat_margin = (max_lat - min_lat) * 0.15
+        lon_margin = (max_lon - min_lon) * 0.15
         
         return (min_lat - lat_margin, min_lon - lon_margin, 
                 max_lat + lat_margin, max_lon + lon_margin)

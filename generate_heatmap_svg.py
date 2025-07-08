@@ -167,6 +167,17 @@ Examples:
             )
             print(f"✅ Generated heatmap with bounds: {bounds}")
             
+            # Expand bounds for USA region to include eastern states like Maine (excluding Alaska and Hawaii)
+            if args.region in ['usa', 'all']:
+                min_lat, min_lon, max_lat, max_lon = bounds
+                # Extend to cover contiguous 48 states only (exclude Alaska and Hawaii)
+                extended_min_lat = max(24, min_lat)    # Southern border (exclude Hawaii)
+                extended_max_lat = min(49, max_lat)    # Northern border (exclude Alaska)
+                extended_min_lon = max(-125, min_lon)  # Western border (exclude Alaska)
+                extended_max_lon = max(-66, max_lon)   # Include Maine and eastern states
+                bounds = (extended_min_lat, extended_min_lon, extended_max_lat, extended_max_lon)
+                print(f"🗺️  Extended bounds for contiguous USA (excluding Alaska/Hawaii): {bounds}")
+            
         except Exception as e:
             progress_reporter.add_error(f"Failed to generate heatmap: {e}")
             return
@@ -207,6 +218,9 @@ Examples:
             if args.region in ['minnesota', 'saint_paul_100km']:
                 projection_type = 'utm'
                 print(f"  Using UTM Zone 15N projection for {args.region} region...")
+            elif args.region in ['usa', 'all']:
+                projection_type = 'albers'
+                print(f"  Using Albers Equal Area Conic projection for {args.region} region...")
             else:
                 print(f"  Using equirectangular projection...")
             
@@ -329,6 +343,90 @@ Examples:
                         progress_reporter.add_warning(f"Failed to load state parks: {e}")
                 else:
                     print("  State parks rendering disabled in configuration")
+            
+            # Add national parks if enabled and we're in a USA region
+            if args.region in ['usa', 'all', 'minnesota', 'saint_paul_100km']:
+                parks_config = boundary_config.get("usa", {}).get("national_parks", {})
+                if parks_config.get("enabled", False):
+                    try:
+                        parks_file = parks_config.get("data_file", "map_cache/us_national_parks.json")
+                        print(f"  Loading national parks from {parks_file}...")
+                        
+                        with open(parks_file, 'r') as f:
+                            parks_data = json.load(f)
+                        
+                        # Get individual park settings
+                        park_settings = config.get("us_national_parks", {})
+                        
+                        if parks_data.get("features"):
+                            # Filter parks based on individual settings
+                            enabled_parks = []
+                            for park in parks_data["features"]:
+                                park_name = park.get("properties", {}).get("name", "")
+                                if park_settings.get(park_name, True):  # Default to True if not specified
+                                    enabled_parks.append(park)
+                            
+                            if enabled_parks:
+                                print(f"  Adding {len(enabled_parks)} national parks (filtered from {len(parks_data['features'])} total)...")
+                                renderer.add_national_parks(
+                                    enabled_parks,
+                                    stroke_color=parks_config.get("color", "#ff6b00"),
+                                    fill_color=parks_config.get("fill", "none"),
+                                    size=parks_config.get("size", 12),
+                                    stroke_width=parks_config.get("stroke_width", 2)
+                                )
+                            else:
+                                print("  No national parks enabled in configuration")
+                        else:
+                            print("  No national parks found in data file")
+                    except FileNotFoundError:
+                        progress_reporter.add_warning(f"National parks file not found: {parks_file}")
+                    except Exception as e:
+                        progress_reporter.add_warning(f"Failed to load national parks: {e}")
+                else:
+                    print("  National parks rendering disabled in configuration")
+            
+            # Add cities if enabled and we're in a USA region
+            if args.region in ['usa', 'all']:
+                cities_config = boundary_config.get("usa", {}).get("cities", {})
+                if cities_config.get("enabled", False):
+                    try:
+                        cities_file = cities_config.get("data_file", "map_cache/us_cities.json")
+                        print(f"  Loading cities from {cities_file}...")
+                        
+                        with open(cities_file, 'r') as f:
+                            cities_data = json.load(f)
+                        
+                        # Get individual city settings
+                        city_settings = config.get("us_cities", {})
+                        
+                        if cities_data.get("features"):
+                            # Filter cities based on individual settings
+                            enabled_cities = []
+                            for city in cities_data["features"]:
+                                city_name = city.get("properties", {}).get("name", "")
+                                if city_settings.get(city_name, True):  # Default to True if not specified
+                                    enabled_cities.append(city)
+                            
+                            if enabled_cities:
+                                print(f"  Adding {len(enabled_cities)} cities (filtered from {len(cities_data['features'])} total)...")
+                                renderer.add_cities(
+                                    enabled_cities,
+                                    stroke_color=cities_config.get("color", "#ff0000"),
+                                    fill_color=cities_config.get("fill", "none"),
+                                    size=cities_config.get("size", 16),
+                                    stroke_width=cities_config.get("stroke_width", 2)
+                                )
+                            else:
+                                print("  No cities enabled in configuration")
+                        else:
+                            print("  No cities found in data file")
+                    except FileNotFoundError:
+                        progress_reporter.add_warning(f"Cities file not found: {cities_file}")
+                    except Exception as e:
+                        progress_reporter.add_warning(f"Failed to load cities: {e}")
+                else:
+                    print("  Cities rendering disabled in configuration")
             
             # Add title and metadata
             athlete_name = f"{athlete_info['firstname']} {athlete_info['lastname']}"

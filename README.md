@@ -10,6 +10,8 @@ StravaのGPSデータから美しいヒートマップを生成するPythonア�
 - 🌏 **自動地域判定**: GPS範囲に基づく適切な境界データ自動選択
 - 🎨 **設定ベーススタイリング**: 境界タイプ別の色・線幅・表示制御
 - 🏞️ **ミネソタ州立公園表示**: 59の州立公園を個別制御可能な円マーカーで表示
+- 🏔️ **アメリカ国立公園表示**: 79の国立公園・記念碑を△印マーカーで表示、個別制御可能
+- 🏙️ **アメリカ都市表示**: 10の主要都市を□印マーカーで表示、個別制御可能
 - 🔄 **自動レート制限管理**: Strava APIの制限を自動検知・回避
 - 🔐 **スマート認証**: 自動トークンリフレッシュ・永続化
 - 📊 **進捗レポート**: リアルタイム処理状況・統計表示
@@ -18,6 +20,20 @@ StravaのGPSデータから美しいヒートマップを生成するPythonア�
 - 🎨 **完全カスタマイズ**: config.jsonベースの柔軟な設定システム
 
 ## 📸 サンプル
+
+### アメリカ全域ヒートマップ例
+アメリカ全域465アクティビティ（2,520,773 GPS点）から生成されたヒートマップ：
+
+![アメリカ全域ヒートマップ](images/strava_heatmap_usa.png)
+
+*アメリカ地域フィルタリング（`--region usa`）による結果*
+- **データ**: 465アクティビティ、約252万GPS点
+- **範囲**: 24.7°N-48.8°N, 125°W-66°W（本土48州、アラスカ・ハワイ除外）
+- **投影法**: Albers Equal Area Conic投影、距離・面積の高精度保持
+- **境界**: 州境界（58本）+ 湖境界（99本）+ メイン州境界含む
+- **国立公園**: 79サイト中37の国立公園・記念碑を△印で表示
+- **都市**: 主要10都市を□印で表示（シカゴ、マイアミ、ダラス等）
+- **設定**: 1600x1600ピクセル、2.0幅GPS軌跡、1.0幅境界線
 
 ### ミネソタ州ヒートマップ例
 ミネソタ州内の403アクティビティ（1,947,578 GPS点）から生成されたヒートマップ：
@@ -29,11 +45,14 @@ StravaのGPSデータから美しいヒートマップを生成するPythonア�
 - **範囲**: 43.6°N-48.4°N, 96.2°W-90.5°W（5年間の活動記録）
 - **投影法**: UTM Zone 15N（EPSG:32615）高精度投影、距離誤差<0.04%
 - **境界**: 州境界（8本）+ 湖境界（15本）、市境界は非表示
-- **設定**: 3600x3600ピクセル、2.0幅GPS軌跡、1.0幅境界線
+- **州立公園**: 59サイト中25の州立公園を○印で表示
+- **国立公園**: ミネソタ関連の国立公園・記念碑を△印で表示
+- **設定**: 1600x1600ピクセル、2.0幅GPS軌跡、1.0幅境界線
 
 **地域フィルタリング機能の例:**
 - `--region japan`: 日本のみ（20アクティビティ）
 - `--region usa`: アメリカ全域（465アクティビティ）
+- `--region minnesota`: ミネソタ州のみ（403アクティビティ）
 - `--region saint_paul_100km`: セントポール半径100km（339アクティビティ）
 
 ## 🚀 クイックスタート
@@ -183,6 +202,22 @@ source venv/bin/activate && python generate_heatmap_svg.py --region saint_paul_1
         "radius": 10,
         "stroke_width": 2,
         "data_file": "map_cache/minnesota_state_parks.json"
+      },
+      "national_parks": {
+        "enabled": true,
+        "color": "#0099ff",
+        "fill": "none",
+        "size": 24,
+        "stroke_width": 2,
+        "data_file": "map_cache/us_national_parks.json"
+      },
+      "cities": {
+        "enabled": true,
+        "color": "#0033ff",
+        "fill": "none",
+        "size": 16,
+        "stroke_width": 2,
+        "data_file": "map_cache/us_cities.json"
       }
     }
   },
@@ -196,6 +231,41 @@ source venv/bin/activate && python generate_heatmap_svg.py --region saint_paul_1
     "Split Rock Lighthouse State Park": true,
     "Temperance River State Park": true,
     "Whitewater State Park": true
+  },
+  "us_national_parks": {
+    "Acadia National Park": true,
+    "Alcatraz Island": true,
+    "Arches National Park": true,
+    "Badlands National Park": true,
+    "Boundary Waters Canoe Area": true,
+    "Devils Tower National Monument": true,
+    "Golden Gate National Recreation Area": true,
+    "Grand Canyon National Park": true,
+    "Grays Peak": true,
+    "Lake Tahoe": true,
+    "Lincoln Memorial": true,
+    "Mt. Evans": true,
+    "National Mall and Memorial Parks": true,
+    "Saint Croix National Scenic Riverway": true,
+    "The White House and President's Park": true,
+    "Thomas Jefferson Memorial": true,
+    "Torreys Peak": true,
+    "Washington Monument": true,
+    "Yellowstone National Park": true,
+    "Yosemite National Park": true,
+    "Zion National Park": true
+  },
+  "us_cities": {
+    "Chicago": true,
+    "Dallas": true,
+    "Goldthwaite": true,
+    "Houston": true,
+    "Key West": true,
+    "Miami": true,
+    "Monterey": true,
+    "New Orleans": true,
+    "Portland": true,
+    "San Diego": true
   },
   "download": {
     "max_years": 8,
@@ -222,7 +292,7 @@ source venv/bin/activate && python generate_heatmap_svg.py --region saint_paul_1
 
 **地域フィルタリング機能:**
 - **Japan**: 24°-46°N, 123°-146°E（日本列島全域）
-- **USA**: 24°-72°N, 180°-66°W（アラスカ含むアメリカ全域）
+- **USA**: 24°-49°N, 125°-66°W（本土48州、アラスカ・ハワイ除外）
 - **Minnesota**: 43.5°-49.4°N, 97.2°-89.5°W（ミネソタ州境界）
 - **Saint Paul 100km**: セントポール中心半径100km（Haversine距離計算）
 
@@ -231,6 +301,20 @@ source venv/bin/activate && python generate_heatmap_svg.py --region saint_paul_1
 - **個別制御**: config.jsonで各公園の表示/非表示を設定可能
 - **カスタマイズ**: 色・サイズ・線幅を設定可能な円マーカー
 - **自動表示**: ミネソタ地域（`minnesota`、`saint_paul_100km`）で自動描画
+
+**アメリカ国立公園機能:**
+- **79の国立公園・記念碑**: 全アメリカ国立公園・記念碑・レクリエーションエリアの正確なGPS座標データベース
+- **△印マーカー**: 識別しやすい三角形マーカーで表示
+- **個別制御**: config.jsonで各国立公園の表示/非表示を設定可能
+- **カスタマイズ**: 色・サイズ・線幅を完全制御（デフォルト：ライトブルー）
+- **自動表示**: アメリカ地域（`usa`、`all`）で自動描画
+
+**アメリカ都市機能:**
+- **10の主要都市**: アメリカの代表的な都市の正確なGPS座標データベース
+- **□印マーカー**: 識別しやすい正方形マーカーで表示
+- **個別制御**: config.jsonで各都市の表示/非表示を設定可能
+- **カスタマイズ**: 色・サイズ・線幅を完全制御（デフォルト：ダークブルー）
+- **自動表示**: アメリカ地域（`usa`、`all`）で自動描画
 
 **自動地域判定:**
 - GPS範囲に基づいて適切な境界データを自動選択
@@ -308,8 +392,11 @@ athlete_info_latest.json            # アスリート情報
 ```
 strava_heatmap.svg                  # 生成されたヒートマップ
 strava_heatmap_minnesota.svg        # ミネソタ地域ヒートマップ
+strava_heatmap_usa.svg              # アメリカ地域ヒートマップ（国立公園・都市付き）
 map_cache/                          # 地理境界データキャッシュ
 map_cache/minnesota_state_parks.json  # ミネソタ州立公園座標データ
+map_cache/us_national_parks.json    # アメリカ国立公園座標データ
+map_cache/us_cities.json            # アメリカ主要都市座標データ
 ```
 
 ### データフロー
@@ -417,11 +504,11 @@ python background_download.py
 - **依存関係**: requests>=2.25.0, numpy>=1.21.0, pyproj>=3.0.0
 - **ディスク**: GPS データサイズに応じて（通常1-10MB）
 
-### 🆕 新機能：高精度投影法（2025-07-03）
-- **UTM Zone 15N**: ミネソタ・セントポール地域で自動的に高精度投影を使用
-- **距離精度**: <0.04%の誤差で距離が正確
-- **形状保持**: 等角図法により角度と形状を正確に保持
-- **自動選択**: `--region minnesota`、`--region saint_paul_100km`で自動有効化
+### 🆕 新機能：多投影法システム（2025-07-07）
+- **UTM Zone 15N**: ミネソタ・セントポール地域で高精度投影（距離誤差<0.04%）
+- **Albers Equal Area Conic**: アメリカ全域で距離・面積の正確保持、ひずみ最小化
+- **Equirectangular**: 日本・その他地域でのバランス投影
+- **自動選択**: 地域に応じた最適投影の自動適用
 
 ## 🔍 トラブルシューティング
 
@@ -480,6 +567,34 @@ python download_individual_activities.py
 - **個別表示制御**: config.jsonで各公園の表示/非表示を個別設定
 - **カスタマイズ可能なスタイル**: 色・サイズ・線幅の完全制御
 - **自動描画**: ミネソタ地域フィルタリング時に自動表示
+
+### 2025-07-07: アメリカ国立公園機能追加
+- **79の国立公園データベース**: 全アメリカ国立公園・記念碑の完全なGPS座標データ
+- **△印マーカー表示**: 識別しやすい三角形マーカーでの可視化
+- **個別公園制御**: config.jsonで各国立公園の表示/非表示を個別設定
+- **カスタマイズ可能スタイル**: 色・サイズ・線幅の完全制御（ライトブルーデフォルト）
+- **自動描画**: アメリカ地域（`usa`、`all`、`minnesota`、`saint_paul_100km`）で自動表示
+- **追加サイト**: 国立記念碑、国立レクリエーションエリア、ワシントンD.C.記念施設含む
+
+### 2025-07-08: アメリカ都市表示機能追加
+- **10都市データベース**: アメリカ主要都市の正確なGPS座標データ
+- **□印マーカー表示**: 識別しやすい正方形マーカーでの可視化
+- **個別都市制御**: config.jsonで各都市の表示/非表示を個別設定
+- **カスタマイズ可能スタイル**: 色・サイズ・線幅の完全制御（ダークブルーデフォルト）
+- **自動描画**: アメリカ地域（`usa`、`all`）で自動表示
+- **主要都市**: キーウェスト、マイアミ、ダラス、ヒューストン、シカゴ、ポートランド等
+
+### 2025-07-08: メイン州境界問題修正
+- **東海岸範囲拡張**: GPS範囲を-66°まで拡張してメイン州境界を含む
+- **アラスカ・ハワイ除外**: 本土48州のみに範囲を限定（24°-49°N, 125°-66°W）
+- **境界データ最適化**: 不要な遠隔地域データを除外してパフォーマンス向上
+- **完全な州境界表示**: 全48州の境界線が正確に描画される保証
+
+### 2025-07-07: 多投影法システム実装
+- **Albers Equal Area Conic投影**: アメリカ全域でのひずみ最小化・高精度表示
+- **描画範囲拡大**: アメリカ東海岸の完全カバレッジ（-66°から-60°へ拡張）
+- **投影自動選択**: 地域に応じた最適投影の自動適用
+- **視覚品質向上**: 各地域で最も適切な投影法による正確な地理表現
 
 ### 継続的な機能強化
 - **GPS データ検証**: 完全性チェック・破損データ検出

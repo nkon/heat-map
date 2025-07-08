@@ -344,7 +344,7 @@ def filter_gps_data_by_region(gps_data: Dict[int, Dict], region: str) -> Dict[in
         return 24 <= lat <= 46 and 123 <= lon <= 146
     
     def is_in_usa(lat: float, lon: float) -> bool:
-        """Check if coordinates are in USA (rough bounds)"""
+        """Check if coordinates are in USA (rough bounds, expanded eastward to include Maine)"""
         return 24 <= lat <= 72 and -180 <= lon <= -66
     
     def is_in_minnesota(lat: float, lon: float) -> bool:

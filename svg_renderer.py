@@ -15,6 +15,7 @@ class SVGRenderer:
         self.svg_root = None
         self.projection = None
         self.utm_transformer = None
+        self.albers_transformer = None
         self.projection_type = 'equirectangular'
         
     def setup_projection(self, bounds: Tuple[float, float, float, float], projection_type: str = 'equirectangular'):
@@ -23,6 +24,8 @@ class SVGRenderer:
         
         if projection_type == 'utm' and PYPROJ_AVAILABLE:
             self._setup_utm_projection(bounds)
+        elif projection_type == 'albers' and PYPROJ_AVAILABLE:
+            self._setup_albers_projection(bounds)
         else:
             self._setup_equirectangular_projection(bounds)
     
@@ -86,12 +89,55 @@ class SVGRenderer:
             'offset_y': self.height / 2
         }
     
+    def _setup_albers_projection(self, bounds: Tuple[float, float, float, float]):
+        min_lat, min_lon, max_lat, max_lon = bounds
+        
+        # Albers Equal Area Conic for USA
+        # Standard projection for CONUS with standard parallels at 29.5°N and 45.5°N
+        # EPSG:5070 is Albers Equal Area Conic for CONUS but with extended bounds for Alaska/Hawaii
+        # Using custom Albers with better parameters for full USA including Alaska
+        albers_proj = "+proj=aea +lat_0=23 +lon_0=-96 +lat_1=29.5 +lat_2=45.5 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs"
+        self.albers_transformer = Transformer.from_crs('EPSG:4326', albers_proj, always_xy=True)
+        
+        # Convert bounds to Albers coordinates
+        min_x, min_y = self.albers_transformer.transform(min_lon, min_lat)
+        max_x, max_y = self.albers_transformer.transform(max_lon, max_lat)
+        
+        # Expand bounds to include more of eastern USA
+        x_range = max_x - min_x
+        y_range = max_y - min_y
+        
+        # Expand eastward by 40% to include Maine and eastern states
+        expanded_max_x = max_x + (x_range * 0.4)
+        x_range = expanded_max_x - min_x
+        
+        # Calculate scale to fit the SVG canvas
+        x_scale = self.width / x_range
+        y_scale = self.height / y_range
+        
+        # Use the smaller scale to ensure everything fits
+        scale = min(x_scale, y_scale) * 0.9
+        
+        # Center the projection
+        center_x = (min_x + expanded_max_x) / 2
+        center_y = (min_y + max_y) / 2
+        
+        self.projection = {
+            'scale': scale,
+            'center_x': center_x,
+            'center_y': center_y,
+            'offset_x': self.width / 2,
+            'offset_y': self.height / 2
+        }
+    
     def lat_lon_to_svg(self, lat: float, lon: float) -> Tuple[float, float]:
         if not self.projection:
             raise ValueError("Projection not set up")
         
         if self.projection_type == 'utm' and self.utm_transformer:
             return self._lat_lon_to_svg_utm(lat, lon)
+        elif self.projection_type == 'albers' and self.albers_transformer:
+            return self._lat_lon_to_svg_albers(lat, lon)
         else:
             return self._lat_lon_to_svg_equirectangular(lat, lon)
     
@@ -115,6 +161,18 @@ class SVGRenderer:
         y = (proj['center_y'] - utm_y) * proj['scale'] + proj['offset_y']  # Flip Y axis
         
         return x, y
+    
+    def _lat_lon_to_svg_albers(self, lat: float, lon: float) -> Tuple[float, float]:
+        # Transform lat/lon to Albers coordinates
+        x, y = self.albers_transformer.transform(lon, lat)
+        
+        proj = self.projection
+        
+        # Convert to SVG coordinates
+        svg_x = (x - proj['center_x']) * proj['scale'] + proj['offset_x']
+        svg_y = proj['offset_y'] - (y - proj['center_y']) * proj['scale']  # Invert Y
+        
+        return svg_x, svg_y
     
     def create_svg(self, bounds: Tuple[float, float, float, float], 
                    background_color: str = '#ffffff', projection_type: str = 'equirectangular') -> ET.Element:
@@ -314,18 +372,95 @@ class SVGRenderer:
                 title = ET.SubElement(circle, 'title')
                 title.text = properties.get('name', 'State Park')
 
+    def add_national_parks(self, national_parks_data: List[Dict[str, Any]], 
+                          stroke_color: str = '#ff6b00', fill_color: str = 'none',
+                          size: int = 12, stroke_width: int = 2):
+        """Add national parks as triangles to the SVG"""
+        if not self.svg_root:
+            raise ValueError("SVG not initialized")
+        
+        parks_group = ET.SubElement(self.svg_root, 'g')
+        parks_group.set('id', 'national-parks')
+        
+        for park in national_parks_data:
+            geometry = park.get('geometry', {})
+            coordinates = geometry.get('coordinates', [])
+            properties = park.get('properties', {})
+            
+            if len(coordinates) >= 2:
+                lon, lat = coordinates[0], coordinates[1]
+                x, y = self.lat_lon_to_svg(lat, lon)
+                
+                # Create triangle polygon (equilateral triangle pointing up)
+                height = size * 0.866  # height of equilateral triangle
+                half_base = size / 2
+                
+                # Triangle points: top, bottom-left, bottom-right
+                points = [
+                    (x, y - height * 2/3),  # top point
+                    (x - half_base, y + height * 1/3),  # bottom-left
+                    (x + half_base, y + height * 1/3)   # bottom-right
+                ]
+                
+                points_str = ' '.join([f'{px:.2f},{py:.2f}' for px, py in points])
+                
+                triangle = ET.SubElement(parks_group, 'polygon')
+                triangle.set('points', points_str)
+                triangle.set('stroke', stroke_color)
+                triangle.set('stroke-width', str(stroke_width))
+                triangle.set('fill', fill_color)
+                
+                # Add park name as title for tooltips
+                title = ET.SubElement(triangle, 'title')
+                title.text = properties.get('name', 'National Park')
+
+    def add_cities(self, cities_data: List[Dict[str, Any]], 
+                   stroke_color: str = '#ff0000', fill_color: str = 'none',
+                   size: int = 16, stroke_width: int = 2):
+        """Add cities as squares to the SVG"""
+        if not self.svg_root:
+            raise ValueError("SVG not initialized")
+        
+        cities_group = ET.SubElement(self.svg_root, 'g')
+        cities_group.set('id', 'cities')
+        
+        for city in cities_data:
+            geometry = city.get('geometry', {})
+            coordinates = geometry.get('coordinates', [])
+            properties = city.get('properties', {})
+            
+            if len(coordinates) >= 2:
+                lon, lat = coordinates[0], coordinates[1]
+                x, y = self.lat_lon_to_svg(lat, lon)
+                
+                # Create square (rectangle) element centered on the point
+                half_size = size / 2
+                
+                square = ET.SubElement(cities_group, 'rect')
+                square.set('x', f'{x - half_size:.2f}')
+                square.set('y', f'{y - half_size:.2f}')
+                square.set('width', str(size))
+                square.set('height', str(size))
+                square.set('stroke', stroke_color)
+                square.set('stroke-width', str(stroke_width))
+                square.set('fill', fill_color)
+                
+                # Add city name as title for tooltips
+                title = ET.SubElement(square, 'title')
+                title.text = properties.get('name', 'City')
+
     def add_legend(self):
         if not self.svg_root:
             raise ValueError("SVG not initialized")
         
         legend_group = ET.SubElement(self.svg_root, 'g')
         legend_group.set('id', 'legend')
-        legend_group.set('transform', f'translate({self.width - 150}, {self.height - 100})')
+        legend_group.set('transform', f'translate({self.width - 150}, {self.height - 115})')
         
         # Legend background
         legend_bg = ET.SubElement(legend_group, 'rect')
         legend_bg.set('width', '140')
-        legend_bg.set('height', '90')
+        legend_bg.set('height', '125')
         legend_bg.set('fill', 'white')
         legend_bg.set('stroke', '#ccc')
         legend_bg.set('stroke-width', '1')
@@ -381,6 +516,40 @@ class SVGRenderer:
         park_text.set('font-size', '12')
         park_text.set('fill', '#333')
         park_text.text = 'State Parks'
+        
+        # National parks legend (triangle)
+        triangle_points = "20,75 15,85 25,85"  # Triangle pointing up
+        national_triangle = ET.SubElement(legend_group, 'polygon')
+        national_triangle.set('points', triangle_points)
+        national_triangle.set('stroke', '#ff6b00')
+        national_triangle.set('stroke-width', '2')
+        national_triangle.set('fill', 'none')
+        
+        national_text = ET.SubElement(legend_group, 'text')
+        national_text.set('x', '35')
+        national_text.set('y', '85')
+        national_text.set('font-family', 'Arial, sans-serif')
+        national_text.set('font-size', '12')
+        national_text.set('fill', '#333')
+        national_text.text = 'National Parks'
+        
+        # Cities legend (square)
+        city_rect = ET.SubElement(legend_group, 'rect')
+        city_rect.set('x', '16')
+        city_rect.set('y', '91')
+        city_rect.set('width', '8')
+        city_rect.set('height', '8')
+        city_rect.set('stroke', '#ff0000')
+        city_rect.set('stroke-width', '2')
+        city_rect.set('fill', 'none')
+        
+        city_text = ET.SubElement(legend_group, 'text')
+        city_text.set('x', '35')
+        city_text.set('y', '100')
+        city_text.set('font-family', 'Arial, sans-serif')
+        city_text.set('font-size', '12')
+        city_text.set('fill', '#333')
+        city_text.text = 'Cities'
     
     def save_svg(self, filename: str):
         if not self.svg_root:

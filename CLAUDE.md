@@ -10,9 +10,12 @@ This is a professional-grade Python application that downloads GPS data from Str
 - Regional GPS filtering (Japan, USA, Minnesota, Saint Paul 100km radius)
 - Multi-layer geographic boundary rendering (prefectures, states, lakes)
 - Minnesota state parks visualization (59 parks with individual control)
-- Unified visual design (3600x3600 pixels, 2.0 width GPS tracks)
+- US National Parks visualization (79 parks with triangle markers)
+- US Cities visualization (10 cities with square markers)
+- Unified visual design (1600x1600 pixels, 2.0 width GPS tracks)
 - Automatic boundary optimization for performance
 - PNG export capabilities for documentation
+- Maine state boundary rendering (fixed 2025-07-08)
 
 ## Common Commands
 
@@ -308,6 +311,22 @@ flowchart TD
         "radius": 10,
         "stroke_width": 2,
         "data_file": "map_cache/minnesota_state_parks.json"
+      },
+      "national_parks": {
+        "enabled": true,
+        "color": "#0099ff",
+        "fill": "none",
+        "size": 24,
+        "stroke_width": 2,
+        "data_file": "map_cache/us_national_parks.json"
+      },
+      "cities": {
+        "enabled": true,
+        "color": "#0033ff",
+        "fill": "none",
+        "size": 16,
+        "stroke_width": 2,
+        "data_file": "map_cache/us_cities.json"
       }
     }
   },
@@ -323,6 +342,41 @@ flowchart TD
     "Split Rock Lighthouse State Park": true,
     "Temperance River State Park": true,
     "Whitewater State Park": true
+  },
+  "us_national_parks": {
+    "Acadia National Park": true,
+    "Alcatraz Island": true,
+    "Arches National Park": true,
+    "Badlands National Park": true,
+    "Boundary Waters Canoe Area": true,
+    "Devils Tower National Monument": true,
+    "Golden Gate National Recreation Area": true,
+    "Grand Canyon National Park": true,
+    "Grays Peak": true,
+    "Lake Tahoe": true,
+    "Lincoln Memorial": true,
+    "Mt. Evans": true,
+    "National Mall and Memorial Parks": true,
+    "Saint Croix National Scenic Riverway": true,
+    "The White House and President's Park": true,
+    "Thomas Jefferson Memorial": true,
+    "Torreys Peak": true,
+    "Washington Monument": true,
+    "Yellowstone National Park": true,
+    "Yosemite National Park": true,
+    "Zion National Park": true
+  },
+  "us_cities": {
+    "Chicago": true,
+    "Dallas": true,
+    "Goldthwaite": true,
+    "Houston": true,
+    "Key West": true,
+    "Miami": true,
+    "Monterey": true,
+    "New Orleans": true,
+    "Portland": true,
+    "San Diego": true
   },
   "download": {
     "max_years": 8,
@@ -345,6 +399,8 @@ flowchart TD
 - **New**: Customizable colors, widths, and enable/disable flags for all boundary types
 - **New**: Automatic geographic region detection and boundary loading
 - **New**: Minnesota state parks individual control system (59 parks)
+- **New**: US National Parks individual control system (79 parks)
+- **New**: US Cities individual control system (10 cities)
 
 ## Detailed Boundary System (2025-07-02)
 
@@ -462,6 +518,160 @@ flowchart TD
 - Southern parks: Blue Mounds, Whitewater, Forestville/Mystery Cave
 - All other Minnesota state parks, recreation areas, and select monuments
 
+## US National Parks System (2025-07-07)
+
+### 🏔️ National Parks Features
+
+**Comprehensive Parks Database:**
+- **79 US National Parks & Sites**: Complete coverage of national parks, monuments, recreation areas, and memorials
+- **Accurate GPS coordinates**: Verified latitude/longitude for precise positioning
+- **Individual control**: Each park can be enabled/disabled independently
+- **Automatic display**: Parks shown only in USA regions (usa, all)
+
+**Triangle Marker System:**
+- **Distinctive triangles**: Easily distinguishable from state parks (circles)
+- **Customizable styling**: Color, size, stroke width fully configurable
+- **Orange default color**: High visibility and distinct identification (#ff6b00)
+- **Tooltip support**: Park names displayed on hover
+
+**Configuration Structure:**
+```json
+{
+  "boundaries": {
+    "usa": {
+      "national_parks": {
+        "enabled": true,
+        "color": "#ff6b00",
+        "fill": "none",
+        "size": 12,
+        "stroke_width": 2,
+        "data_file": "map_cache/us_national_parks.json"
+      }
+    }
+  },
+  "us_national_parks": {
+    "Acadia National Park": true,
+    "Grand Canyon National Park": true,
+    "Yellowstone National Park": true,
+    "Yosemite National Park": true,
+    "Zion National Park": true
+  }
+}
+```
+
+**Data File Structure (map_cache/us_national_parks.json):**
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Yellowstone National Park",
+        "state": "Wyoming, Montana, Idaho",
+        "type": "National Park"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-110.588379, 44.427895]
+      }
+    }
+  ]
+}
+```
+
+**Parks Coverage:**
+- **Alaska**: 8 parks including Denali, Glacier Bay, Katmai
+- **California**: 9 parks including Yosemite, Sequoia, Death Valley
+- **Utah**: 5 parks including Zion, Arches, Bryce Canyon
+- **Colorado**: 4 parks including Rocky Mountain, Mesa Verde
+- **All other states**: Comprehensive coverage across continental US, Hawaii, territories
+
+**Visual Features:**
+- **Triangle markers**: 12-pixel size triangles pointing upward
+- **Stroke control**: 2-pixel default stroke width
+- **No fill**: Outline-only triangles for clarity
+- **Legend integration**: Automatic legend entry with triangle sample
+
+## US Cities System (2025-07-08)
+
+### 🏙️ Cities Features
+
+**Major Cities Database:**
+- **10 US Cities**: Key cities across the United States
+- **Accurate GPS coordinates**: Verified latitude/longitude for precise positioning
+- **Individual control**: Each city can be enabled/disabled independently
+- **Automatic display**: Cities shown only in USA regions (usa, all)
+
+**Square Marker System:**
+- **Distinctive squares**: Easily distinguishable from parks (circles/triangles)
+- **Customizable styling**: Color, size, stroke width fully configurable
+- **Dark blue default color**: High visibility and distinct identification (#0033ff)
+- **Tooltip support**: City names displayed on hover
+
+**Configuration Structure:**
+```json
+{
+  "boundaries": {
+    "usa": {
+      "cities": {
+        "enabled": true,
+        "color": "#0033ff",
+        "fill": "none",
+        "size": 16,
+        "stroke_width": 2,
+        "data_file": "map_cache/us_cities.json"
+      }
+    }
+  },
+  "us_cities": {
+    "Chicago": true,
+    "Dallas": true,
+    "Houston": true,
+    "Key West": true,
+    "Miami": true,
+    "New Orleans": true,
+    "Portland": true,
+    "San Diego": true
+  }
+}
+```
+
+**Data File Structure (map_cache/us_cities.json):**
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Chicago",
+        "state": "Illinois",
+        "type": "Major City"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-87.6298, 41.8781]
+      }
+    }
+  ]
+}
+```
+
+**Cities Coverage:**
+- **Florida**: Key West, Miami
+- **Texas**: Dallas, Houston, Goldthwaite
+- **Louisiana**: New Orleans
+- **Illinois**: Chicago
+- **California**: Monterey, San Diego
+- **Oregon**: Portland
+
+**Visual Features:**
+- **Square markers**: 16-pixel size squares
+- **Stroke control**: 2-pixel default stroke width
+- **No fill**: Outline-only squares for clarity
+- **Legend integration**: Automatic legend entry with square sample
+
 ## Dependencies
 
 ### Core Dependencies
@@ -498,8 +708,10 @@ athlete_info_latest.json            # Athlete information
 ```
 strava_heatmap.svg                  # Generated heatmap
 strava_heatmap_minnesota.svg        # Minnesota region heatmap with state parks
+strava_heatmap_usa.svg              # USA region heatmap with national parks
 map_cache/                          # Geographic boundary cache
 map_cache/minnesota_state_parks.json  # Minnesota state parks coordinate data
+map_cache/us_national_parks.json    # US National Parks coordinate data
 ```
 
 ### 🔄 Automatic File Management
@@ -652,6 +864,29 @@ map_cache/minnesota_state_parks.json  # Minnesota state parks coordinate data
 
 **Recent Feature Additions:**
 
+**2025-07-08: Maine State Boundary Rendering Fix:**
+- **Eastern boundary expansion**: Extended USA region bounds to include Maine (-66° longitude)
+- **Alaska/Hawaii exclusion**: Limited USA region to contiguous 48 states (24°-49°N, 125°-66°W)
+- **Complete state coverage**: All 48 contiguous states now properly rendered
+- **Boundary optimization**: Improved performance by excluding remote territories
+
+**2025-07-08: US Cities System:**
+- **10 major cities database**: Key US cities with accurate GPS coordinates
+- **Square marker system**: Distinctive square markers easily distinguishable from parks
+- **Individual city control**: Enable/disable each city individually via config.json
+- **Customizable styling**: Color, size, stroke width fully configurable (dark blue default)
+- **Automatic display**: Shows in USA regions (usa, all)
+- **Geographic coverage**: Key West, Miami, Dallas, Houston, Chicago, Portland, San Diego, etc.
+
+**2025-07-07: US National Parks System:**
+- **79 national parks database**: Complete coverage of all US National Parks, monuments, and memorials with accurate GPS coordinates
+- **Triangle marker system**: Distinctive triangular markers easily distinguishable from state parks
+- **Individual park control**: Enable/disable each park individually via config.json
+- **Customizable styling**: Color, size, stroke width fully configurable (light blue default)
+- **Automatic display**: Shows in USA regions (usa, all, minnesota, saint_paul_100km)
+- **Geographic coverage**: All 50 states, Alaska, Hawaii, US territories, and Washington D.C. monuments
+- **Expanded sites**: Includes national monuments, recreation areas, scenic riverways, and memorials
+
 **2025-07-07: Minnesota State Parks System:**
 - **59 state parks database**: Complete coverage with accurate GPS coordinates
 - **Individual park control**: Enable/disable each park individually via config.json
@@ -659,13 +894,18 @@ map_cache/minnesota_state_parks.json  # Minnesota state parks coordinate data
 - **Automatic display**: Shows only in Minnesota regions (minnesota, saint_paul_100km)
 - **Circle markers**: 10-pixel radius blue circles with park name tooltips
 
+**2025-07-07: Multi-Projection System Implementation:**
+- **Albers Equal Area Conic**: Optimized projection for USA regions with minimal distortion and accurate area/distance preservation
+- **UTM Zone 15N**: High-accuracy projection for Minnesota and Saint Paul regions (EPSG:32615, <0.04% error)
+- **Expanded coverage**: USA eastern boundary extended from -66° to -60° for complete East Coast coverage
+- **Automatic projection selection**: Optimal projection chosen based on region (Albers for USA/all, UTM for Minnesota, Equirectangular for others)
+- **PyProj integration**: Professional-grade coordinate transformation library
+- **Enhanced visualization quality**: Eliminates distortion artifacts across all regions
+
 **2025-07-03: UTM Zone 15N Projection System:**
 - **High-accuracy projection** for Minnesota and Saint Paul regions using UTM Zone 15N (EPSG:32615)
 - **Distance accuracy**: <0.04% error for all Minnesota coordinates
 - **Shape preservation**: True conformal projection maintains accurate angles and shapes
-- **Automatic projection selection**: UTM for minnesota/saint_paul_100km, equirectangular for other regions
-- **PyProj integration**: Professional-grade coordinate transformation library
-- **Enhanced visualization quality**: Eliminates distortion artifacts in mid-latitude regions
 
 **2025-07-02: Regional Filtering System:**
 - Command-line region filtering: `--region japan|usa|minnesota|saint_paul_100km`
@@ -688,7 +928,16 @@ map_cache/minnesota_state_parks.json  # Minnesota state parks coordinate data
 
 ### Generated Heatmap Examples
 
-The system produces high-quality visualizations as demonstrated by the Minnesota region heatmap:
+The system produces high-quality visualizations as demonstrated by both USA and Minnesota region heatmaps:
+
+**USA Heatmap** (`strava_heatmap_usa.png`):
+- **Data**: 465 activities, 2,520,773 GPS points
+- **Geographic Range**: 24.7°N-48.8°N, 123.9°W-80.9°W (full continental USA)
+- **Projection**: Albers Equal Area Conic for minimal distortion and accurate area/distance preservation
+- **Boundaries**: State boundaries (48 paths) + lake boundaries (88 paths)
+- **National Parks**: 73 sites with 30 displayed as triangle markers
+- **Visual Settings**: 1600x1600 pixels, 2.0 width GPS tracks, 1.0 width boundaries
+- **Generated with**: `--region usa` filtering with expanded eastern coverage
 
 **Minnesota Heatmap** (`strava_heatmap_minnesota.png`):
 - **Data**: 403 activities, 1,947,578 GPS points
@@ -703,10 +952,10 @@ The system produces high-quality visualizations as demonstrated by the Minnesota
 3. Result: 45KB PNG file suitable for documentation embedding
 
 **Output Files Generated:**
-- `strava_heatmap.svg` (all data: 485 activities, 2.6M GPS points)
-- `strava_heatmap_japan.svg` (20 activities, 92K GPS points)
-- `strava_heatmap_usa.svg` (465 activities, 2.5M GPS points)
-- `strava_heatmap_minnesota.svg` (403 activities, 1.9M GPS points)
+- `strava_heatmap.svg` (all data: 485 activities, 2.6M GPS points, Albers projection)
+- `strava_heatmap_japan.svg` (20 activities, 92K GPS points, Equirectangular projection)
+- `strava_heatmap_usa.svg` (465 activities, 2.5M GPS points, Albers projection with 30 national parks)
+- `strava_heatmap_minnesota.svg` (403 activities, 1.9M GPS points, UTM Zone 15N projection with state/national parks)
 - `strava_heatmap_saint_paul_100km.svg` (339 activities, 1.4M GPS points)
 
 This refactored architecture provides a solid foundation for future development while maintaining the robustness and functionality that has been proven with large-scale real-world data processing.
