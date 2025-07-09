@@ -11,7 +11,7 @@ This is a professional-grade Python application that downloads GPS data from Str
 - Multi-layer geographic boundary rendering (prefectures, states, lakes)
 - Minnesota state parks visualization (59 parks with individual control)
 - US National Parks visualization (79 parks with triangle markers)
-- US Cities visualization (10 cities with square markers)
+- US Cities visualization (11 cities with square markers)
 - Unified visual design (1600x1600 pixels, 2.0 width GPS tracks)
 - Automatic boundary optimization for performance
 - PNG export capabilities for documentation
@@ -598,7 +598,7 @@ flowchart TD
 ### 🏙️ Cities Features
 
 **Major Cities Database:**
-- **10 US Cities**: Key cities across the United States
+- **11 US Cities**: Key cities across the United States
 - **Accurate GPS coordinates**: Verified latitude/longitude for precise positioning
 - **Individual control**: Each city can be enabled/disabled independently
 - **Automatic display**: Cities shown only in USA regions (usa, all)
@@ -629,6 +629,7 @@ flowchart TD
     "Dallas": true,
     "Houston": true,
     "Key West": true,
+    "Los Angeles": true,
     "Miami": true,
     "New Orleans": true,
     "Portland": true,
@@ -663,7 +664,7 @@ flowchart TD
 - **Texas**: Dallas, Houston, Goldthwaite
 - **Louisiana**: New Orleans
 - **Illinois**: Chicago
-- **California**: Monterey, San Diego
+- **California**: Los Angeles, Monterey, San Diego
 - **Oregon**: Portland
 
 **Visual Features:**
